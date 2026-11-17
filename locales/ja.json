@@ -1,0 +1,7 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "PLANT MATTER",
+    "NSPhotoLibraryUsageDescription": "植物の写真を記録に添付するため、写真ライブラリへのアクセスが必要です。",
+    "NSCameraUsageDescription": "植物の写真をその場で撮影して記録するため、カメラへのアクセスが必要です。"
+  }
+}

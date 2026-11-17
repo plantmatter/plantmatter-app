@@ -1,26 +1,46 @@
 {
   "expo": {
-    "name": "plantmatter-app",
-    "slug": "plantmatter-app",
-    "version": "1.0.0",
+    "name": "PLANT MATTER",
+    "slug": "plantmatter",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "plantmatterapp",
-    "userInterfaceStyle": "automatic",
+    "scheme": "plantmatter",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F4F4F4",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.plantmatter.app",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
+      }
     },
     "android": {
+      "package": "com.plantmatter.app",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png"
       },
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ],
       "predictiveBackGestureEnabled": false
     },
+    "locales": {
+      "ko": "./locales/ko.json",
+      "en": "./locales/en.json",
+      "ja": "./locales/ja.json"
+    },
     "web": {
-      "output": "server",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -28,14 +48,25 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#FFFFFF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 220
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "식물 사진을 기록에 첨부하려면 사진 보관함 접근이 필요합니다.",
+          "cameraPermission": "식물 사진을 바로 촬영해 기록하려면 카메라 접근이 필요합니다.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-apple-authentication",
+      "expo-localization",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
-      "typedRoutes": true,
+      "typedRoutes": false,
       "reactCompiler": true
     }
   }

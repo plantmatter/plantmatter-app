@@ -1,0 +1,7 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "PLANT MATTER",
+    "NSPhotoLibraryUsageDescription": "PLANT MATTER needs access to your photos to attach plant pictures to your records.",
+    "NSCameraUsageDescription": "PLANT MATTER needs the camera to take plant pictures for your records."
+  }
+}
