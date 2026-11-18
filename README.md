@@ -125,7 +125,8 @@ React Native + Expo로 만들고, 서버는 Supabase를 씁니다.
 7. **비밀번호 최소 길이:** 같은 화면에서 Minimum password length를 **8**로 맞춰 주세요. 앱도 8자 이상을 요구합니다.
 8. **계정 삭제 함수 배포:** Edge Functions → **Deploy a new function → Via editor**
    - 이름은 `delete-account`
-   - `supabase/functions/delete-account/index.ts` 내용을 붙여 넣고 **Deploy**합니다. "Verify JWT"는 켠 채로 두세요.
+   - `supabase/functions/delete-account/index.ts` 내용을 붙여 넣고 **Deploy**합니다. 비밀 키 같은 값은 넣을 필요 없습니다(Supabase가 함수에 자동으로 줍니다).
+   - 함수 설정의 **"Verify JWT"는 끄세요.** 함수 코드가 로그인한 사용자를 직접 확인합니다.
    - 이 함수가 없으면 앱의 "계정 삭제"가 실패합니다. Apple·Google 모두 계정 삭제 기능이 필수입니다.
 9. **앱에 넣을 값:** Project Settings → **API Keys**에서 두 가지를 복사합니다.
    - **Project URL**
