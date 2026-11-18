@@ -4,9 +4,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { BulletRow, ExpandToggle, GridTable, KeyValueRow, Pill, Rule, SpacedTitle, SummaryTable } from '@/components/detail';
+import { BulletRow, ExpandToggle, GridTable, KeyValueRow, Rule, SpacedTitle, SummaryTable } from '@/components/detail';
 import { MemberGate } from '@/components/gate';
-import { PhotoPager } from '@/components/photos';
+import { AdaptivePhotoPager } from '@/components/photos';
 import { FindName } from '@/components/sci-name';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
@@ -29,7 +29,7 @@ export default function FindDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <TopBar right={<Pill small label="Edit" onPress={() => router.push(`/finds/edit?id=${id}`)} testID="find-edit" />} />
+      <TopBar onEdit={() => router.push(`/finds/edit?id=${id}`)} editTestID="find-edit" />
       <Page testID="find-detail">
         <MemberGate what={t('관찰 기록', 'My Observations', '観察記録')}>
           <FindDetail id={id} />
@@ -113,7 +113,7 @@ function FindDetail({ id }: { id: string }) {
         </Notice>
       )}
       {f.photo_paths.length > 0 ? (
-        <PhotoPager flush={!pending} aspect={1} uris={f.photo_paths.map((x) => resolve(x))} testID="find-photos-view" />
+        <AdaptivePhotoPager flush={!pending} uris={f.photo_paths.map((x) => resolve(x))} testID="find-photos-view" />
       ) : (
         <Txt size={10} color={C.muted} style={{ letterSpacing: 1.2, marginBottom: 6 }}>
           OBSERVATION
@@ -123,6 +123,7 @@ function FindDetail({ id }: { id: string }) {
         <SummaryTable
           rows={[
             { label: t('학명', 'Scientific name', '学名'), value: <FindName find={f} size={17} style={{ lineHeight: 23 }} testID="find-title" /> },
+            { label: t('과', 'Family', '科'), value: f.family ?? '', testID: 'find-info-family' },
             { label: t('동정 상태', 'Species identified', '同定'), value: idStatusLabel(f.identification_status, locale), testID: 'find-info-status' },
             { label: t('관찰 위치', 'Locality', '観察地点'), value: findPlaceLabel(f.region, f.country_code, locale) || t('지정 안 함', 'Not set', '未設定'), testID: 'find-info-country' },
             { label: t('관찰 일자', 'Observation Date', '観察日'), value: dayLabel(f.observed_on, locale), testID: 'find-info-date' },

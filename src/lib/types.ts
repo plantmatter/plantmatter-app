@@ -23,6 +23,8 @@ export type Plant = {
   category_id: string | null;
   /** Shown name, composed from genus / species / cultivar (or "seed × pollen"). */
   scientific_name: string;
+  /** Family (v0.1.4); not part of the shown name. */
+  family: string;
   genus: string | null;
   species: string | null;
   cultivar: string | null;
@@ -50,9 +52,13 @@ export type Find = {
   owner_id: string;
   /** Full name as shown, author included ("Bulbophyllum cf. echinolabium J.J.Sm."). */
   scientific_name: string;
+  /** Family (v0.1.4); not part of the shown name. */
+  family: string;
   genus: string | null;
-  /** cf. / aff. before the species epithet (v0.1.2). */
-  qualifier: 'cf.' | 'aff.' | null;
+  /** sp. (v0.1.4) / cf. / aff. (v0.1.2). */
+  qualifier: 'sp.' | 'cf.' | 'aff.' | null;
+  /** Additional name with sp. (v0.1.4): Selaginella sp. 'Blue'. */
+  cultivar: string | null;
   species: string | null;
   /** Author citation of the name (v0.1.2). */
   authority: string | null;

@@ -20,7 +20,7 @@ export function SciName({ pieces, size = 15, style, numberOfLines, testID }: { p
   );
 }
 
-type FindLike = { scientific_name: string; genus?: string | null; qualifier?: Qualifier | null; species?: string | null; authority?: string | null };
+type FindLike = { scientific_name: string; genus?: string | null; qualifier?: Qualifier | null; species?: string | null; authority?: string | null; cultivar?: string | null };
 /** Pieces for an observation: from its parts, or from the stored text for older records; "이름 모름" when unknown. */
 export function useFindPieces(f: FindLike): NamePiece[] {
   const { locale } = useLocale();

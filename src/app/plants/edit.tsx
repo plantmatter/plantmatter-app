@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { FamilyField } from '@/components/family-field';
 import { MemberGate } from '@/components/gate';
 import { PhotoField } from '@/components/photos';
 import { PlacePicker, type PlaceValue } from '@/components/place-picker';
@@ -14,11 +15,11 @@ import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
 import { Button, Field, Loading, Page, ScreenTitle, SectionHead, Segmented, SelectBox, VisibilityField } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { categoryPath, savePlant, topCategories, useCategories, usePlants, useShops, type PlantInput } from '@/lib/data';
+import { categoryPath, savePlant, topCategories, useCategories, useFinds, usePlants, useShops, type PlantInput } from '@/lib/data';
 import { notify } from '@/lib/dialogs';
 import { useLocale } from '@/lib/i18n';
 import { ID_STATUSES, idStatusLabel } from '@/lib/labels';
-import { cleanCultivar, composeName, normalizeGenus, parseName } from '@/lib/names';
+import { cleanCultivar, composeName, familyForGenus, knownFamilies, normalizeFamily, normalizeGenus, parseName } from '@/lib/names';
 import { storeFormPhotos, useSignedUrls, userFolder, type FormPhoto } from '@/lib/photos';
 import { errorText, USER_BUCKET } from '@/lib/supabase';
 import { C } from '@/lib/theme';
@@ -64,7 +65,20 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
   // Plants saved before v0.1.1 have one free-text name: split it into its parts once.
   const initial = existing ? (existing.genus ? { genus: existing.genus, species: existing.species ?? '', cultivar: existing.cultivar ?? '' } : parseName(existing.scientific_name)) : { genus: presetGenus, species: '', cultivar: '' };
   const [photos, setPhotos] = useState<FormPhoto[]>(() => (existing?.photo_paths ?? []).map((path) => ({ key: path, path })));
+  const finds = useFinds().data ?? [];
+  const records = [...plants, ...finds];
   const [genus, setGenus] = useState(initial.genus);
+  // 과: filled from earlier records of the same genus until typed by hand.
+  const [family, setFamily] = useState(() => existing?.family || familyForGenus(records, initial.genus));
+  const [familyTyped, setFamilyTyped] = useState(!!existing?.family);
+  const changeGenus = (v: string) => {
+    setGenus(v);
+    if (!familyTyped) setFamily(familyForGenus(records, v));
+  };
+  const changeFamily = (v: string) => {
+    setFamily(v);
+    setFamilyTyped(true);
+  };
   const [species, setSpecies] = useState(initial.species);
   const [cultivar, setCultivar] = useState(initial.cultivar);
   const [origin, setOrigin] = useState<PlaceValue>({ region: existing?.origin_region ?? null, place: existing?.origin_place ?? null });
@@ -116,6 +130,7 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
       const row: PlantInput = {
         id,
         scientific_name: composeName({ genus: g, species, cultivar, seed: seed.name, pollen: pollen.name }) || g,
+        family: normalizeFamily(family),
         genus: g,
         species: species.trim().slice(0, 100) || null,
         cultivar: cleanCultivar(cultivar) || null,
@@ -149,11 +164,12 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
       <PhotoField label={t('사진', 'Photos', '写真')} photos={photos} onChange={setPhotos} max={PLANT_PHOTO_LIMIT} resolve={resolve} testID="plant-photos" />
 
       <SectionHead>{t('학명', 'SCIENTIFIC NAME', '学名')}</SectionHead>
+      <FamilyField value={family} onChange={changeFamily} known={knownFamilies(records)} testID="plant-family" />
       <Field
         label={t('속 (Genus)', 'Genus', '属 (Genus)')}
         required
         value={genus}
-        onChangeText={setGenus}
+        onChangeText={changeGenus}
         placeholder="Bulbophyllum"
         autoCapitalize="words"
         autoCorrect={false}
@@ -164,7 +180,7 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
       {!!genusChoices.length && (
         <View style={styles.chips} testID="genus-choices">
           {genusChoices.map((g) => (
-            <Pressable key={g} onPress={() => setGenus(g)} style={styles.chip} accessibilityRole="button" testID={`genus-choice-${g}`}>
+            <Pressable key={g} onPress={() => changeGenus(g)} style={styles.chip} accessibilityRole="button" testID={`genus-choice-${g}`}>
               <Txt italic size={13}>
                 {g}
               </Txt>

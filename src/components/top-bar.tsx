@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/lib/i18n';
 import { BAR_HEIGHT, C } from '@/lib/theme';
 
-import { ChevronLeft, Menu, Plus } from './icons';
+import { ChevronLeft, Menu, PencilIcon, Plus } from './icons';
 import { Txt } from './txt';
 
 type Props = {
@@ -16,12 +16,15 @@ type Props = {
   onBack?: () => void;
   onAdd?: () => void;
   addLabel?: string;
+  /** Pencil icon at the right (detail screens). */
+  onEdit?: () => void;
+  editTestID?: string;
   onMenu?: () => void;
   right?: ReactNode;
   title?: string;
 };
 
-export function TopBar({ left = 'back', onBack, onAdd, addLabel, onMenu, right, title }: Props) {
+export function TopBar({ left = 'back', onBack, onAdd, addLabel, onEdit, editTestID, onMenu, right, title }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
   const back = () => (onBack ? onBack() : router.canGoBack() ? router.back() : router.replace('/'));
@@ -44,6 +47,11 @@ export function TopBar({ left = 'back', onBack, onAdd, addLabel, onMenu, right, 
       )}
       <View style={[styles.side, styles.right]}>
         {right}
+        {onEdit && (
+          <Pressable onPress={onEdit} hitSlop={10} style={styles.icon} accessibilityRole="button" accessibilityLabel={t('편집', 'Edit', '編集')} testID={editTestID ?? 'top-edit'}>
+            <PencilIcon />
+          </Pressable>
+        )}
         {onAdd && (
           <Pressable onPress={onAdd} hitSlop={10} style={styles.icon} accessibilityRole="button" accessibilityLabel={addLabel ?? t('추가', 'Add', '追加')} testID="top-add">
             <Plus />

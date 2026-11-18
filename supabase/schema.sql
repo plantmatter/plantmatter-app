@@ -1,4 +1,4 @@
--- PLANT MATTER app — database schema (v0.1.3)
+-- PLANT MATTER app — database schema (v0.1.4)
 -- Run once in a NEW Supabase project: SQL Editor → paste everything → Run. Safe to run again.
 --
 -- What it creates
@@ -6,9 +6,9 @@
 --   beta_invites      e-mail addresses allowed to use the beta (managed here, in the SQL Editor)
 --   app_admins        accounts that may post MATTER events and shops (managed here)
 --   plant_categories  "My Plants" categories, two levels
---   plants            kept plants (genus = category, species, cultivar, origin, seed / pollen parents, photos,
---                     shop, last watering)
---   finds             observations (name with cf./aff. and author, recorded by, country or region,
+--   plants            kept plants (family, genus = category, species, cultivar, origin, seed / pollen parents,
+--                     photos, shop, last watering)
+--   finds             observations (family, name with sp./cf./aff., additional name and author, recorded by, country or region,
 --                     locality / coordinates hidden by default, elevation, habitat, occurrence ID, and the
 --                     Found Wild record: time, growth form, substrate, phenology, measurements, collection)
 --   matter_events     plant events (anyone can read, admins write)
@@ -442,7 +442,40 @@ do $$ begin
   end if;
 end $$;
 
+-- 13. v0.1.4 · FAMILY, sp. AND THE ADDITIONAL NAME OF OBSERVATIONS ------------------------------------------
+-- 과 (family) for plants and observations (not part of the shown name). Observations may now say "sp." on
+-- purpose and carry an additional name with it: Selaginella sp. 'Blue'.
+alter table public.plants add column if not exists family text not null default '';
+alter table public.finds add column if not exists family text not null default '';
+alter table public.finds add column if not exists cultivar text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'plants_family_length') then
+    alter table public.plants add constraint plants_family_length check (char_length(family) <= 60);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'finds_family_and_name_v014') then
+    alter table public.finds add constraint finds_family_and_name_v014 check (
+      char_length(family) <= 60
+      and (cultivar is null or char_length(cultivar) <= 100)
+      and (cultivar is null or qualifier = 'sp.'));
+  end if;
+end $$;
+-- The v0.1.2 rule allowed only cf. / aff.; rebuild it with sp. (same rule otherwise).
+alter table public.finds drop constraint if exists finds_field_record;
+alter table public.finds add constraint finds_field_record check (
+  (qualifier is null or qualifier in ('sp.', 'cf.', 'aff.'))
+  and (authority is null or char_length(authority) <= 100)
+  and char_length(recorded_by) <= 200
+  and char_length(locality) <= 300
+  and (latitude is null or latitude between -90 and 90)
+  and (longitude is null or longitude between -180 and 180)
+  and ((latitude is null) = (longitude is null))
+  and (elevation_m is null or elevation_m between -500 and 9000)
+  and (occurrence_id is null or occurrence_id ~ '^PM-[0-9]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$'));
+
 notify pgrst, 'reload schema';
+
+-- The website (plantmatter/plantmatter-web) adds its own member table with supabase/web01_shop_customers.sql
+-- in that repository; it does not change the tables above.
 
 -- AFTER RUNNING ---------------------------------------------------------------------------------------
 -- 1) Invite testers (one line per e-mail, lower case):

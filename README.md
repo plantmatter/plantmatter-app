@@ -1,7 +1,22 @@
-# PLANT MATTER 앱 — v0.1.3 (베타)
+# PLANT MATTER 앱 — v0.1.4 (베타)
 
 내가 키우는 식물과 야생에서 관찰한 식물을 기록하고, 식물 행사·매장을 소개하는 **iPhone / Android 앱**입니다.
 React Native + Expo로 만들고, 서버는 Supabase를 씁니다.
+
+## v0.1.4에서 바뀐 것
+1. **앱과 웹 계정 통합:** plantmatter.kr(웹 저장소 `plantmatter-web`)은 이미 이 앱과 **같은 Supabase 프로젝트·같은 계정**으로 로그인합니다. 웹 쪽 `supabase/web01_shop_customers.sql`이 실제 DB에 적용된 것을 확인했고, 앱 DB 규칙 87개가 웹 SQL과 함께 있어도 그대로 통과합니다(앱 가입은 웹 회원 정보를 만들지 않고, 웹 가입은 만들고, 계정 삭제 시 함께 지워짐).
+   - 앱의 Account 화면과 개인정보 안내에 "같은 계정으로 plantmatter.kr에도 로그인" 안내와, 계정 삭제 시 웹 회원 정보도 지워진다는 문구를 넣었습니다.
+2. **상세 화면 사진:** 회색 여백 없이 가득. 사진마다 비율에 맞춰 칸 높이가 정해지고(가로 최대 4:3, 세로 최대 9:16, 그보다 길거나 넓으면 살짝 잘라 채움), 넘길 때 손가락을 따라 높이가 부드럽게 바뀝니다. (식물·관찰 기록 상세)
+3. **편집 버튼 → 연필 아이콘** (라임색·글자 없음, 화면 읽기에서는 "편집")
+4. **과(Family):** 식물·관찰 기록 모두 학명 맨 위에 입력. 이름은 속부터 그대로이고, 상세 요약 표에 "과" 줄이 생깁니다. 같은 속에 전에 적은 과가 있으면 자동으로 채워지고, 전에 쓴 과는 버튼으로 고릅니다.
+5. **관찰 기록 한정어 sp.:** [없음 / sp. / cf. / aff.]. sp.를 고르면 종소명·명명자는 잠기고 **추가 식별명**을 쓸 수 있습니다. 예) *Selaginella* sp. 'Blue'. (참고: Sigovini, Keppel & Tagliapietra 2016, *Open Nomenclature in the biodiversity era*)
+
+### v0.1.4 적용 방법
+1. Supabase **SQL Editor**에서 **`supabase/v0.1.4.sql`**을 실행합니다(v0.1.1~v0.1.4 포함, 다시 실행해도 안전).
+2. 새 휴대폰 기능이 없어서 다시 빌드하지 않고 EAS Update로 보냅니다.
+   ```bash
+   npx eas-cli@latest update --channel production --environment production --message "v0.1.4"
+   ```
 
 ## v0.1.3에서 바뀐 것
 **화면 다듬기 (참고 디자인 반영)**
@@ -114,9 +129,9 @@ React Native + Expo로 만들고, 서버는 Supabase를 씁니다.
 | `src/lib/` | 서버 연결, 로그인, 데이터, 사진 업로드, 오프라인 보관, 날짜·지역 계산 |
 | `src/data/geo.ts` | 나라 250개(한/영/일 이름)와 지역·섬 목록 |
 | `src/content/legal.ts` | 이용약관·개인정보 처리방침 **초안** |
-| `supabase/schema.sql` | 새 Supabase 프로젝트에 한 번 실행할 SQL (v0.1.3까지 포함) |
-| `supabase/v0.1.3.sql` | 이전 버전을 쓰던 프로젝트에 실행할 업데이트 SQL (v0.1.1~v0.1.3 포함) |
-| `supabase/v0.1.1.sql`, `v0.1.2.sql` | 이전 업데이트 SQL (v0.1.3.sql에 들어 있으므로 따로 실행할 필요 없음) |
+| `supabase/schema.sql` | 새 Supabase 프로젝트에 한 번 실행할 SQL (v0.1.4까지 포함). 웹 회원 테이블은 웹 저장소의 `web01_shop_customers.sql` |
+| `supabase/v0.1.4.sql` | 이전 버전을 쓰던 프로젝트에 실행할 업데이트 SQL (v0.1.1~v0.1.4 포함) |
+| `supabase/v0.1.1.sql` ~ `v0.1.3.sql` | 이전 업데이트 SQL (v0.1.4.sql에 들어 있으므로 따로 실행할 필요 없음) |
 | `supabase/functions/delete-account/` | 계정 삭제 서버 함수 |
 | `assets/` | 아이콘, 시작 화면, 글꼴 |
 
@@ -124,7 +139,7 @@ React Native + Expo로 만들고, 서버는 Supabase를 씁니다.
 
 ## 1. Supabase 준비 (새 프로젝트)
 1. 공식 이메일로 https://supabase.com 에 가입하고 **New project**를 만듭니다. Region은 **Northeast Asia (Seoul)**을 고르세요.
-2. **SQL Editor**에 `supabase/schema.sql` 전체를 붙여 넣고 **Run**을 누릅니다. 여러 번 실행해도 안전합니다. (v0.1.3 변경까지 들어 있어서 업데이트 SQL은 따로 실행하지 않아도 됩니다.)
+2. **SQL Editor**에 `supabase/schema.sql` 전체를 붙여 넣고 **Run**을 누릅니다. 여러 번 실행해도 안전합니다. (v0.1.4 변경까지 들어 있어서 업데이트 SQL은 따로 실행하지 않아도 됩니다.)
 3. **테스터 초대** (이메일마다 한 줄, 소문자로):
    ```sql
    insert into public.beta_invites (email) values ('tester@example.com') on conflict do nothing;
@@ -224,6 +239,10 @@ React Native + Expo로 만들고, 서버는 Supabase를 씁니다.
   ```bash
   npm run lint
   ```
+- **v0.1.4 작업 중 확인한 것:**
+  - 웹 테스트 빌드 화면 흐름 184개 항목 (연필 아이콘, 사진 칸: 가로 4:3 → 넘기는 중간 정확히 중간 높이 → 세로 9:16, 사진이 칸을 가득 채움, 과 저장·자동 채움, sp. 선택 시 종소명·명명자 잠금과 추가 식별명 포함)
+  - 데이터베이스 규칙 93개 항목 (새 DB, v0.1에서 올린 DB, 지금 운영 상태와 같은 v0.1.3 + 웹 회원 SQL에서 올린 DB 모두), 웹 회원 SQL과의 호환 4개 항목
+  - 영어·일본어 화면 검사, 오프라인 보관 8개, 계산 로직 26개 묶음, TypeScript·Lint 오류 없음, iOS·Android 번들 생성 확인
 - **v0.1.3 작업 중 확인한 것:**
   - 웹 테스트 빌드로 화면 흐름 169개 항목 (분류 목록 선·개수 위치, 사진이 있는 굵은 식물 줄, 식물 상세 표·관수 리셋·∨ 펼치기, 구입처, 관찰 기록 새 항목 저장·Found Wild 순서·측정/채집 묶음, 잘못된 습도 거부 포함)
   - 로컬 PostgreSQL 16에서 데이터베이스 규칙 87개 항목 (새로 설치한 DB, v0.1에서 올린 DB, 지금 운영 중인 v0.1.2 상태에서 올린 DB 모두)

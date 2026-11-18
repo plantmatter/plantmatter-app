@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { ExpandToggle, Pill, Rule, SummaryTable } from '@/components/detail';
 import { MemberGate } from '@/components/gate';
-import { PhotoPager } from '@/components/photos';
+import { AdaptivePhotoPager } from '@/components/photos';
 import { ItemRow } from '@/components/rows';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
@@ -26,7 +26,7 @@ export default function PlantDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <TopBar right={<Pill small label="Edit" onPress={() => router.push(`/plants/edit?id=${id}`)} testID="plant-edit" />} />
+      <TopBar onEdit={() => router.push(`/plants/edit?id=${id}`)} editTestID="plant-edit" />
       <Page testID="plant-detail">
         <MemberGate what={t('내 식물', 'My Plants', 'マイ植物')}>
           <PlantDetail id={id} />
@@ -105,7 +105,7 @@ function PlantDetail({ id }: { id: string }) {
   return (
     <View>
       {p.photo_paths.length > 0 ? (
-        <PhotoPager flush aspect={1} uris={p.photo_paths.map((x) => resolve(x))} testID="plant-photos-view" />
+        <AdaptivePhotoPager flush uris={p.photo_paths.map((x) => resolve(x))} testID="plant-photos-view" />
       ) : (
         <Txt size={10} color={C.muted} style={{ letterSpacing: 1.2, marginBottom: 6 }}>
           MY PLANTS
@@ -122,6 +122,7 @@ function PlantDetail({ id }: { id: string }) {
                 </Txt>
               ),
             },
+            { label: t('과', 'Family', '科'), value: p.family, testID: 'plant-info-family' },
             { label: t('동정 상태', 'Species identified', '同定'), value: idStatusLabel(p.identification_status, locale), testID: 'plant-info-status' },
             { label: t('구입처', 'Shop', '購入先'), value: p.shop, testID: 'plant-info-shop' },
           ]}

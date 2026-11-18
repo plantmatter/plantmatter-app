@@ -80,3 +80,13 @@ export function ChevronDown({ size = 26, color = C.ink, weight = 2, up = false }
     </View>
   );
 }
+
+/** Pencil (edit), drawn like the plantmatter.kr magnifier: thin line, round ends. */
+export function PencilIcon({ size = 24, color = C.ink, weight = 1.6 }: { size?: number; color?: string; weight?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={weight} strokeLinejoin="round" strokeLinecap="round">
+      <Path d="M4.5 19.5 5.3 15.6 15.9 5a2 2 0 0 1 2.8 0l.3.3a2 2 0 0 1 0 2.8L8.4 18.7z" />
+      <Path d="m14.2 6.7 3.1 3.1" />
+    </Svg>
+  );
+}

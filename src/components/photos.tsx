@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, Animated as RNAnimated, FlatList, Pressable, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { chooseAsync, notify } from '@/lib/dialogs';
 import { useLocale } from '@/lib/i18n';
 import { pickPhotos, type FormPhoto } from '@/lib/photos';
+import { frameRatio } from '@/lib/frame';
 import { moveItem, slotAt, slotXY } from '@/lib/reorder';
 import { C, GUTTER } from '@/lib/theme';
 
@@ -192,6 +193,64 @@ function PhotoTile({ src, cover, slot, start, dragging, tx, ty, onStart, onMove,
         </Pressable>
       </Animated.View>
     </GestureDetector>
+  );
+}
+
+/**
+ * Detail photos that fill the frame with no grey bars. The frame takes each photo's own shape (between
+ * 4:3 landscape and 9:16 portrait; beyond that the photo is trimmed to fill), and while swiping its height
+ * follows the finger from one photo's shape to the next.
+ */
+export function AdaptivePhotoPager({ uris, flush, testID }: { uris: string[]; flush?: boolean; testID?: string }) {
+  const { width } = useWindowDimensions();
+  const w = Math.min(width, 720);
+  const [ratios, setRatios] = useState<Record<string, number>>({});
+  const [index, setIndex] = useState(0);
+  const [x] = useState(() => new RNAnimated.Value(0));
+  if (!uris.length) return null;
+  const heights = uris.map((u) => Math.round(w * (ratios[u] ?? 4 / 3)));
+  const height = heights.length > 1 ? x.interpolate({ inputRange: heights.map((_, i) => i * w), outputRange: heights, extrapolate: 'clamp' }) : heights[0];
+  const onScroll = RNAnimated.event([{ nativeEvent: { contentOffset: { x } } }], {
+    useNativeDriver: false,
+    listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const i = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, w));
+      if (i !== index) setIndex(i);
+    },
+  });
+  return (
+    <RNAnimated.View style={{ width: w, height, alignSelf: 'center', marginBottom: 18, marginTop: flush ? -GUTTER : 0, backgroundColor: '#E9E9E9', overflow: 'hidden' }} testID={testID}>
+      <RNAnimated.FlatList
+        data={uris}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(u, i) => `${i}:${u}`}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        style={{ flex: 1 }}
+        renderItem={({ item }) => (
+          <RNAnimated.View style={{ width: w, height }}>
+            {item ? (
+              <Image
+                source={{ uri: item }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={150}
+                onLoad={(e) => {
+                  const r = frameRatio(e.source.width, e.source.height);
+                  setRatios((prev) => (prev[item] === r ? prev : { ...prev, [item]: r }));
+                }}
+              />
+            ) : null}
+          </RNAnimated.View>
+        )}
+      />
+      {uris.length > 1 && (
+        <Txt size={11} color={C.sub} style={{ position: 'absolute', right: 12, bottom: 10, backgroundColor: 'rgba(255,255,255,0.85)', paddingHorizontal: 7, paddingVertical: 3 }} testID={testID ? `${testID}-count` : undefined}>
+          {`${index + 1}/${uris.length}`}
+        </Txt>
+      )}
+    </RNAnimated.View>
   );
 }
 

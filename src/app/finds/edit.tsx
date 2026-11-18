@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { DateField, TimeField } from '@/components/date-field';
+import { FamilyField } from '@/components/family-field';
 import { MemberGate } from '@/components/gate';
 import { ChevronDown } from '@/components/icons';
 import { PhotoField } from '@/components/photos';
@@ -16,13 +17,13 @@ import { Txt } from '@/components/txt';
 import { Button, ChoiceChips, Field, Label, Loading, Page, ScreenTitle, SectionHead, Segmented, VisibilityField } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { formatCoords, numText, parseCoords, parseDecimal, parseElevation } from '@/lib/coords';
-import { topCategories, useCategories, useFinds } from '@/lib/data';
+import { topCategories, useCategories, useFinds, usePlants } from '@/lib/data';
 import { notify } from '@/lib/dialogs';
 import { isDateStr, isTimeStr, todayStr } from '@/lib/format';
 import { isCountry, regionOf } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { ABUNDANCE, GROWTH_FORMS, ID_STATUSES, idStatusLabel, MEASUREMENT_BASES, PHENOLOGY, presetText } from '@/lib/labels';
-import { cleanAuthority, composeFindName, displayName, findNamePieces, normalizeGenus, parseName, splitQualifier, UNIDENTIFIED, type Qualifier } from '@/lib/names';
+import { cleanAuthority, cleanCultivar, composeFindName, displayName, familyForGenus, findNamePieces, knownFamilies, normalizeFamily, normalizeGenus, parseName, splitQualifier, UNIDENTIFIED, type Qualifier } from '@/lib/names';
 import { newOccurrenceId } from '@/lib/occurrence';
 import { queuedAsFind, saveFind, useOutbox } from '@/lib/outbox';
 import { useSignedUrls, type FormPhoto } from '@/lib/photos';
@@ -72,6 +73,9 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
   const [qualifier, setQualifier] = useState<QualChoice>(existing?.qualifier ?? 'none');
   const [species, setSpecies] = useState(initial.species);
   const [authority, setAuthority] = useState(existing?.authority ?? '');
+  const [cultivar, setCultivar] = useState(existing?.cultivar ?? '');
+  const [family, setFamily] = useState(existing?.family ?? '');
+  const [familyTyped, setFamilyTyped] = useState(!!existing?.family);
   const [status, setStatus] = useState<IdStatus>(existing?.identification_status ?? 'unidentified');
   const [recordedBy, setRecordedBy] = useState(existing?.recorded_by || profile?.display_name || '');
   const [observedOn, setObservedOn] = useState(existing?.observed_on ?? todayStr());
@@ -108,12 +112,31 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
   const resolve = useSignedUrls(photos.map((p) => p.path));
   const cats = useCategories().data ?? [];
   const finds = useFinds().data ?? [];
+  const plantsForFamily = usePlants().data ?? [];
+  const records = [...plantsForFamily, ...finds];
   // Genera already used in My Plants and in earlier observations.
   const known = [...new Set([...topCategories(cats).map((c) => c.name), ...finds.map((f) => f.genus).filter((g): g is string => !!g)])].sort((a, b) => a.localeCompare(b));
   const typed = genus.trim().toLowerCase();
   const genusChoices = known.filter((g) => !typed || (g.toLowerCase().startsWith(typed) && g.toLowerCase() !== typed)).slice(0, 12);
   const split = splitQualifier(species, qualifier === 'none' ? null : qualifier);
-  const parts = { genus, qualifier: split.qualifier, species: split.species, authority };
+  const isSp = qualifier === 'sp.';
+  const parts = { genus, qualifier: split.qualifier, species: split.species, authority: isSp ? '' : authority, cultivar: isSp ? cultivar : '' };
+  const changeGenus = (v: string) => {
+    setGenus(v);
+    if (!familyTyped) setFamily(familyForGenus(records, v));
+  };
+  const changeFamily = (v: string) => {
+    setFamily(v);
+    setFamilyTyped(true);
+  };
+  const changeQualifier = (q: QualChoice) => {
+    setQualifier(q);
+    // sp.: no species epithet and no author; an additional name instead.
+    if (q === 'sp.') {
+      setSpecies('');
+      setAuthority('');
+    }
+  };
   const pieces = findNamePieces(parts);
   const coordsValue = parseCoords(coords);
   const coordsBad = !!coords.trim() && !coordsValue;
@@ -163,10 +186,12 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
         {
           id,
           scientific_name: composeFindName(parts) || UNIDENTIFIED,
+          family: normalizeFamily(family),
+          cultivar: split.qualifier === 'sp.' ? cleanCultivar(cultivar) || null : null,
           genus: normalizeGenus(genus) || null,
           qualifier: split.qualifier,
           species: split.species || null,
-          authority: cleanAuthority(authority) || null,
+          authority: split.qualifier === 'sp.' ? null : cleanAuthority(authority) || null,
           identification_status: status,
           recorded_by: recordedBy.replace(/\s+/g, ' ').trim().slice(0, 200),
           region: (isCountry(place.place) ? regionOf(place.place) : place.region) ?? null,
@@ -220,10 +245,11 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
   return (
     <View>
       <SectionHead>{t('학명', 'SCIENTIFIC NAME', '学名')}</SectionHead>
+      <FamilyField value={family} onChange={changeFamily} known={knownFamilies(records)} testID="find-family" />
       <Field
         label={t('속 (Genus)', 'Genus', '属 (Genus)')}
         value={genus}
-        onChangeText={setGenus}
+        onChangeText={changeGenus}
         placeholder="Bulbophyllum"
         autoCapitalize="words"
         autoCorrect={false}
@@ -234,7 +260,7 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
       {!!genusChoices.length && (
         <View style={styles.chips} testID="find-genus-choices">
           {genusChoices.map((g) => (
-            <Pressable key={g} onPress={() => setGenus(g)} style={styles.chip} accessibilityRole="button" testID={`find-genus-choice-${g}`}>
+            <Pressable key={g} onPress={() => changeGenus(g)} style={styles.chip} accessibilityRole="button" testID={`find-genus-choice-${g}`}>
               <Txt italic size={13}>
                 {g}
               </Txt>
@@ -245,21 +271,38 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
       <Label>{t('한정어 (선택)', 'Qualifier (optional)', '限定詞（任意）')}</Label>
       <Segmented<QualChoice>
         value={qualifier}
-        onChange={setQualifier}
+        onChange={changeQualifier}
         options={[
           { value: 'none', label: t('없음', 'None', 'なし') },
+          { value: 'sp.', label: 'sp.' },
           { value: 'cf.', label: 'cf.' },
           { value: 'aff.', label: 'aff.' },
         ]}
         testID="find-qualifier"
       />
       <Txt size={10} color={C.muted} style={{ marginTop: -8, marginBottom: 16, lineHeight: 15 }}>
-        {t('cf. 이 종으로 보이지만 확실하지 않음 · aff. 이 종과 가깝지만 다른 종일 수 있음. 종소명이 있을 때만 붙습니다.', 'cf. looks like this species but not confirmed · aff. close to this species but possibly another. Used only with a species epithet.', 'cf. この種に見えるが未確定・aff. この種に近いが別種の可能性。種小名があるときだけ付きます。')}
+        {t('sp. 속까지만 동정 · cf. 이 종으로 보이지만 확실하지 않음 · aff. 이 종과 가깝지만 다른 종일 수 있음.', 'sp. identified to genus only · cf. looks like this species but not confirmed · aff. close to this species but possibly another.', 'sp. 属まで同定・cf. この種に見えるが未確定・aff. この種に近いが別種の可能性。')}
       </Txt>
-      <Field label={t('종소명 (선택)', 'Species (optional)', '種小名（任意）')} value={species} onChangeText={setSpecies} placeholder="echinolabium" autoCapitalize="none" autoCorrect={false} maxLength={110} testID="find-species" />
+      {isSp && (
+        <Field label={t('추가 식별명 (선택)', 'Additional name (optional)', '追加識別名（任意）')} value={cultivar} onChangeText={setCultivar} placeholder={t('예: Blue, Bosco Ecuador', 'e.g. Blue, Bosco Ecuador', '例：Blue, Bosco Ecuador')} autoCorrect={false} maxLength={100} testID="find-cultivar" />
+      )}
+      <Field
+        label={t('종소명 (선택)', 'Species (optional)', '種小名（任意）')}
+        value={species}
+        onChangeText={setSpecies}
+        editable={!isSp}
+        placeholder={isSp ? t('sp.를 고르면 쓰지 않습니다', 'Not used with sp.', 'sp.では使いません') : 'echinolabium'}
+        autoCapitalize="none"
+        autoCorrect={false}
+        maxLength={110}
+        style={isSp ? styles.off : undefined}
+        testID="find-species"
+      />
       <Field
         label={t('명명자 (선택)', 'Author (optional)', '命名者（任意）')}
         value={authority}
+        editable={!isSp}
+        style={isSp ? styles.off : undefined}
         onChangeText={setAuthority}
         placeholder={t('예: J.J.Sm.', 'e.g. J.J.Sm.', '例：J.J.Sm.')}
         autoCapitalize="none"
@@ -398,6 +441,7 @@ function FoldHead({ title, open, onPress, testID }: { title: string; open: boole
 }
 
 const styles = StyleSheet.create({
+  off: { opacity: 0.4, backgroundColor: '#ECECEC' },
   pair: { flexDirection: 'row', gap: 10 },
   fold: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: C.rule, paddingTop: 16, paddingBottom: 12, marginTop: 14, marginBottom: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -6, marginBottom: 16 },
