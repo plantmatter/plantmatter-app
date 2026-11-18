@@ -12,7 +12,7 @@ export function termsText(l: Locale): string[] {
       'PLANT MATTER is a beta service for recording the plants you keep and the plants you observe.',
       'You keep the rights to your photos, names and notes. We use them only to store and show them to you.',
       'Do not upload content that is illegal, harmful or infringes the rights of others. Such content may be removed.',
-      'Collecting or exporting wild plants is governed by local law and CITES. The app never stores exact observation spots.',
+      'Collecting or exporting wild plants is governed by local law and CITES. Observation coordinates and localities are hidden from others by default.',
       'Features may change during the beta, and beta data may be reorganised. Keep copies of records that matter to you.',
       'You can delete your account at any time in OPTION → Account. All your records and photos are deleted with it.',
       `Contact: ${contact(l)}`,
@@ -22,7 +22,7 @@ export function termsText(l: Locale): string[] {
       'PLANT MATTERは、育てている植物と観察した植物を記録するベータ版サービスです。',
       '写真・名前・メモの権利は投稿者にあります。保存・表示に必要な範囲でのみ利用します。',
       '違法・有害な内容や他人の権利を侵害する内容は投稿しないでください。該当する内容は削除されることがあります。',
-      '野生植物の採集・持ち出しは各国の法律やCITESに従ってください。アプリは正確な観察場所を保存しません。',
+      '野生植物の採集・持ち出しは各国の法律やCITESに従ってください。観察記録の座標と詳細な場所は、初期設定で他の人に公開されません。',
       'ベータ期間中は機能が変わったりデータが整理されたりすることがあります。大切な記録は別に保管してください。',
       'アカウントはOPTION → Accountからいつでも削除でき、記録と写真もすべて削除されます。',
       `お問い合わせ：${contact(l)}`,
@@ -31,7 +31,7 @@ export function termsText(l: Locale): string[] {
     'PLANT MATTER는 내가 키우는 식물과 관찰한 식물을 기록하는 베타 서비스입니다.',
     '사진·이름·메모의 권리는 작성자에게 있습니다. 저장하고 보여 주는 데 필요한 범위에서만 사용합니다.',
     '불법·유해하거나 다른 사람의 권리를 침해하는 내용은 올리지 마세요. 이런 내용은 삭제될 수 있습니다.',
-    '야생 식물 채집·반출은 각 나라의 법과 CITES를 따라야 합니다. 앱은 정확한 관찰 위치를 저장하지 않습니다.',
+    '야생 식물 채집·반출은 각 나라의 법과 CITES를 따라야 합니다. 관찰 기록의 좌표와 세부 위치는 기본으로 다른 사람에게 공개되지 않습니다.',
     '베타 기간에는 기능이 바뀌거나 데이터가 정리될 수 있습니다. 중요한 기록은 따로 보관해 주세요.',
     '계정은 OPTION → Account에서 언제든 삭제할 수 있고, 삭제하면 기록과 사진도 모두 지워집니다.',
     `문의: ${contact(l)}`,
@@ -41,10 +41,10 @@ export function termsText(l: Locale): string[] {
 export function privacyText(l: Locale): string[] {
   if (l === 'en')
     return [
-      'What we collect: your e-mail address, display name, the plants and observations you record (name, notes, country or region, date, genus, origin, parents) and their photos.',
-      'Location: the app does not use GPS. Photos are re-encoded on your phone before upload, which removes location data embedded in them. Observations keep the country or a broad region only.',
+      'What we collect: your e-mail address, display name, the plants and observations you record (name, notes, country or region, date, genus, origin, parents; for observations also the observer names, locality, coordinates, elevation and habitat) and their photos.',
+      'Location: the app reads the phone\'s location (GPS) only when you tap "Current location" in an observation, to fill in its coordinates and elevation; it never tracks you in the background. You can also type coordinates or leave them out. Photos are re-encoded on your phone before upload, which removes location data embedded in them.',
       'Why: to sign you in and to store and show your records.',
-      'Who can see it: in this version only you can see your plants and observations. Events and shops posted by PLANT MATTER are public.',
+      'Who can see it: in this version only you can see your plants and observations. Locality and coordinates are hidden by default; when sharing arrives, others will see only the country or region unless you choose to show the location. Events and shops posted by PLANT MATTER are public.',
       'Where it is stored: Supabase (database and file storage) in the region chosen for the project.',
       'How long: until you delete it. Deleting your account removes your records and photos at once.',
       `Your rights and questions: edit or delete records in the app, delete your account in OPTION → Account, or contact ${contact(l)}.`,
@@ -52,20 +52,20 @@ export function privacyText(l: Locale): string[] {
     ];
   if (l === 'ja')
     return [
-      '収集する情報：メールアドレス、表示名、記録した植物・観察記録（名前、メモ、国または地域、日付、属、原産地、親株）と写真。',
-      '位置情報：GPSは使用しません。写真はアップロード前に端末で再保存され、埋め込まれた位置情報は削除されます。観察記録は国または広い地域までを保存します。',
+      '収集する情報：メールアドレス、表示名、記録した植物・観察記録（名前、メモ、国または地域、日付、属、原産地、親株。観察記録では観察者名、詳細な場所、座標、標高、生育環境も）と写真。',
+      '位置情報：観察記録で「現在地」を押したときだけ端末の位置情報（GPS）を読み取り、座標と標高を入力します。バックグラウンドで追跡することはありません。座標は手入力や空欄も可能です。写真はアップロード前に端末で再保存され、埋め込まれた位置情報は削除されます。',
       '目的：ログインと、記録の保存・表示のため。',
-      '公開範囲：このバージョンでは植物と観察記録は本人のみが閲覧できます。PLANT MATTERが掲載するイベント・ショップ情報は公開されます。',
+      '公開範囲：このバージョンでは植物と観察記録は本人のみが閲覧できます。詳細な場所と座標は初期設定で非公開で、共有機能が加わった後も位置を公開しない限り他の人には国・地域までしか表示されません。PLANT MATTERが掲載するイベント・ショップ情報は公開されます。',
       '保存先：Supabase（データベース・ファイル保存）、プロジェクトで選んだリージョン。',
       '保存期間：削除するまで。アカウントを削除すると記録と写真はすぐに削除されます。',
       `権利とお問い合わせ：アプリで記録の修正・削除、OPTION → Accountでアカウント削除ができます。お問い合わせ：${contact(l)}`,
       `最終更新：${LEGAL_UPDATED}`,
     ];
   return [
-    '수집하는 정보: 이메일, 표시 이름, 내가 기록한 식물·관찰 기록(이름, 메모, 나라 또는 지역, 날짜, 속, 원산지, 모본·부본)과 사진.',
-    '위치 정보: 앱은 GPS를 쓰지 않습니다. 사진은 올리기 전에 휴대폰에서 다시 저장되며, 이때 사진 속 위치 정보가 지워집니다. 관찰 기록에는 나라 또는 넓은 지역까지만 저장합니다.',
+    '수집하는 정보: 이메일, 표시 이름, 내가 기록한 식물·관찰 기록(이름, 메모, 나라 또는 지역, 날짜, 속, 원산지, 모본·부본, 관찰 기록의 관찰자·세부 위치·좌표·해발고도·서식 환경)과 사진.',
+    '위치 정보: 관찰 기록에서 "현재 위치"를 누를 때만 휴대폰 위치(GPS)를 읽어 좌표와 해발고도를 채웁니다. 백그라운드에서 위치를 추적하지 않으며, 좌표는 직접 입력하거나 비워 둘 수 있습니다. 사진은 올리기 전에 휴대폰에서 다시 저장되며, 이때 사진 속 위치 정보가 지워집니다.',
     '목적: 로그인과 기록의 저장·표시.',
-    '공개 범위: 이번 버전에서는 내 식물과 관찰 기록을 나만 볼 수 있습니다. PLANT MATTER가 올리는 행사·매장 정보는 누구나 볼 수 있습니다.',
+    '공개 범위: 이번 버전에서는 내 식물과 관찰 기록을 나만 볼 수 있습니다. 세부 위치와 좌표는 기본으로 비공개이며, 공유 기능이 생긴 뒤에도 위치 공개를 고르지 않으면 다른 사람에게는 나라·지역까지만 보입니다. PLANT MATTER가 올리는 행사·매장 정보는 누구나 볼 수 있습니다.',
     '보관 위치: Supabase(데이터베이스·파일 저장), 프로젝트에서 고른 리전.',
     '보관 기간: 직접 지울 때까지. 계정을 삭제하면 기록과 사진이 바로 삭제됩니다.',
     `권리와 문의: 앱에서 기록 수정·삭제, OPTION → Account에서 계정 삭제가 가능합니다. 문의: ${contact(l)}`,

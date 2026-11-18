@@ -5,6 +5,7 @@ import { View } from 'react-native';
 
 import { MemberGate } from '@/components/gate';
 import { ItemRow, Nest, SubRow } from '@/components/rows';
+import { FindName } from '@/components/sci-name';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
 import { AllTotal, BigRow, Button, Loading, Notice, Page } from '@/components/ui';
@@ -15,7 +16,6 @@ import { dayLabel } from '@/lib/format';
 import { placeName, regionName, regionOf } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { idStatusLabel } from '@/lib/labels';
-import { displayName } from '@/lib/names';
 import { flushOutbox, queuedAsFind, useOutbox } from '@/lib/outbox';
 import { useSignedUrls } from '@/lib/photos';
 import { errorText } from '@/lib/supabase';
@@ -146,7 +146,7 @@ function FindsByRegion() {
                             {list.map((f) => (
                               <ItemRow
                                 key={f.id}
-                                name={displayName(f.scientific_name, locale)}
+                                name={<FindName find={f} size={15} numberOfLines={2} />}
                                 meta={[dayLabel(f.observed_on, locale), idStatusLabel(f.identification_status, locale)].join(' · ')}
                                 badge={f.pending ? t('업로드 대기', 'WAITING', '送信待ち') : f.is_private ? t('비공개', 'PRIVATE', '非公開') : undefined}
                                 thumb={resolve(f.photo_paths[0])}

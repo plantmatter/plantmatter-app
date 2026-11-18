@@ -1,5 +1,6 @@
-// Simple line icons drawn with views (no icon font or SVG library needed).
+// Simple line icons drawn with views; the magnifier is an SVG copied from plantmatter.kr.
 import { View, type ViewStyle } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { C } from '@/lib/theme';
 
@@ -57,5 +58,15 @@ export function GoArrow({ size = 40, ring = C.ink, color = C.lime }: { size?: nu
         }}
       />
     </View>
+  );
+}
+
+/** The magnifier of plantmatter.kr (same 24×24 drawing: circle r 6.5 and a 5-unit handle, 1.5 stroke, round ends). */
+export function SearchIcon({ size = 24, color = C.ink, weight = 1.5 }: { size?: number; color?: string; weight?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={weight} strokeLinejoin="round" strokeLinecap="round">
+      <Circle cx="10.5" cy="10.5" r="6.5" />
+      <Path d="m15.5 15.5 5 5" />
+    </Svg>
   );
 }

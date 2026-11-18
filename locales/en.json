@@ -2,6 +2,8 @@
   "ios": {
     "CFBundleDisplayName": "PLANT MATTER",
     "NSPhotoLibraryUsageDescription": "PLANT MATTER needs access to your photos to attach plant pictures to your records.",
-    "NSCameraUsageDescription": "PLANT MATTER needs the camera to take plant pictures for your records."
+    "NSCameraUsageDescription": "PLANT MATTER needs the camera to take plant pictures for your records.",
+    "NSLocationWhenInUseUsageDescription": "Your location is used only when you tap 'Current location' to add coordinates to an observation.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location is used only when you tap 'Current location' to add coordinates to an observation."
   }
 }

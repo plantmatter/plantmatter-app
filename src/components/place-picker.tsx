@@ -79,7 +79,7 @@ export function PlacePicker({ mode, value, onChange, label, testID }: { mode: Pi
           mode === 'country'
             ? t('정확한 장소 대신 나라까지만 기록합니다.', 'Only the country is recorded, never the exact spot.', '正確な場所ではなく国だけを記録します。')
             : mode === 'find'
-              ? t('나라 또는 넓은 지역까지만 기록합니다. 정확한 장소는 남기지 않습니다.', 'Only the country or a broad region is recorded, never the exact spot.', '国または広い地域までを記録します。正確な場所は残しません。')
+              ? t('나라를 모르면 "동남아시아 전체"처럼 넓은 지역만 골라도 됩니다. 목록은 이것으로 묶입니다.', 'If unsure of the country, a broad region ("all of Southeast Asia") is fine. Lists are grouped by this.', '国が分からなければ「東南アジア全体」のように広い地域だけでも構いません。一覧はこれでまとめます。')
               : t('넓은 지역만 골라도 됩니다.', 'A broad region alone is fine.', '広い地域だけでも構いません。')
         }
       />

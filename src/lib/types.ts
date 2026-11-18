@@ -44,18 +44,33 @@ export type Plant = {
 export type Find = {
   id: string;
   owner_id: string;
+  /** Full name as shown, author included ("Bulbophyllum cf. echinolabium J.J.Sm."). */
   scientific_name: string;
   genus: string | null;
+  /** cf. / aff. before the species epithet (v0.1.2). */
+  qualifier: 'cf.' | 'aff.' | null;
   species: string | null;
+  /** Author citation of the name (v0.1.2). */
+  authority: string | null;
   identification_status: IdStatus;
+  /** Recorded By (v0.1.2). */
+  recorded_by: string;
   /** Broad region; set alone when only the region is known ("all of Southeast Asia"). */
   region: string | null;
   country_code: string | null;
+  /** Locality in words and coordinates (WGS84), private unless the owner opens them (v0.1.2). */
+  locality: string;
+  latitude: number | null;
+  longitude: number | null;
+  location_private: boolean;
+  elevation_m: number | null;
   observed_on: string;
   habitat: string;
   notes: string;
   photo_paths: string[];
   is_private: boolean;
+  /** PM-2026-7K3QX9, made at the first save and never changed (v0.1.2). */
+  occurrence_id: string | null;
   created_at?: string;
   updated_at?: string;
 };

@@ -2,6 +2,8 @@
   "ios": {
     "CFBundleDisplayName": "PLANT MATTER",
     "NSPhotoLibraryUsageDescription": "植物の写真を記録に添付するため、写真ライブラリへのアクセスが必要です。",
-    "NSCameraUsageDescription": "植物の写真をその場で撮影して記録するため、カメラへのアクセスが必要です。"
+    "NSCameraUsageDescription": "植物の写真をその場で撮影して記録するため、カメラへのアクセスが必要です。",
+    "NSLocationWhenInUseUsageDescription": "観察記録に座標を入れるため、「現在地」ボタンを押したときだけ位置情報を使います。",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "観察記録に座標を入れるため、「現在地」ボタンを押したときだけ位置情報を使います。"
   }
 }

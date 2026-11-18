@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
 
 import { useLocale } from '@/lib/i18n';
@@ -8,12 +8,19 @@ import { ChevronRight } from './icons';
 import { fontFor, Txt } from './txt';
 
 /** Grey scrolling page under the top bar. */
+/** Lets a child (the photo grid while a photo is dragged) stop the page from scrolling. */
+const ScrollLock = createContext<(locked: boolean) => void>(() => {});
+export const useScrollLock = () => useContext(ScrollLock);
+
 export function Page({ children, style, bg = C.bg, scroll = true, testID }: { children: ReactNode; style?: ViewStyle; bg?: string; scroll?: boolean; testID?: string }) {
+  const [locked, setLocked] = useState(false);
   if (!scroll) return <View style={[{ flex: 1, backgroundColor: bg, padding: GUTTER }, style]} testID={testID}>{children}</View>;
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={[{ padding: GUTTER, paddingBottom: 60 }, style]} keyboardShouldPersistTaps="handled" testID={testID}>
-      {children}
-    </ScrollView>
+    <ScrollLock.Provider value={setLocked}>
+      <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={[{ padding: GUTTER, paddingBottom: 60 }, style]} keyboardShouldPersistTaps="handled" scrollEnabled={!locked} testID={testID}>
+        {children}
+      </ScrollView>
+    </ScrollLock.Provider>
   );
 }
 
@@ -159,7 +166,7 @@ export function Segmented<T extends string>({ value, options, onChange, testID }
 }
 
 /** Public / private choice for a record. Sharing arrives in v0.2; until then every record is visible to its owner only. */
-export function VisibilityField({ isPrivate, onChange, label, testID }: { isPrivate: boolean; onChange: (isPrivate: boolean) => void; label: string; testID?: string }) {
+export function VisibilityField({ isPrivate, onChange, label, note, labels, testID }: { isPrivate: boolean; onChange: (isPrivate: boolean) => void; label: string; note?: string; labels?: [string, string]; testID?: string }) {
   const { t } = useLocale();
   return (
     <View style={{ marginBottom: 16 }}>
@@ -168,13 +175,13 @@ export function VisibilityField({ isPrivate, onChange, label, testID }: { isPriv
         value={isPrivate ? 'private' : 'public'}
         onChange={(v) => onChange(v === 'private')}
         options={[
-          { value: 'public', label: t('공개', 'Public', '公開') },
-          { value: 'private', label: t('비공개', 'Private', '非公開') },
+          { value: 'public', label: labels?.[0] ?? t('공개', 'Public', '公開') },
+          { value: 'private', label: labels?.[1] ?? t('비공개', 'Private', '非公開') },
         ]}
         testID={testID}
       />
       <Txt size={10} color={C.muted} style={{ marginTop: -8, lineHeight: 15 }}>
-        {t('공개 설정은 친구·도감 기능이 생기는 다음 버전부터 적용됩니다. 지금은 모든 기록이 나에게만 보입니다.', 'Visibility applies once sharing (friends, dex) arrives in the next version. For now every record is visible to you only.', '公開設定は友だち・図鑑機能が加わる次のバージョンから適用されます。今はすべての記録が自分だけに表示されます。')}
+        {note ?? t('공개 설정은 친구·도감 기능이 생기는 다음 버전부터 적용됩니다. 지금은 모든 기록이 나에게만 보입니다.', 'Visibility applies once sharing (friends, dex) arrives in the next version. For now every record is visible to you only.', '公開設定は友だち・図鑑機能が加わる次のバージョンから適用されます。今はすべての記録が自分だけに表示されます。')}
       </Txt>
     </View>
   );

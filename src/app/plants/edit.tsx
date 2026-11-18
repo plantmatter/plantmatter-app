@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { MemberGate } from '@/components/gate';
 import { PhotoField } from '@/components/photos';
 import { PlacePicker, type PlaceValue } from '@/components/place-picker';
+import { NamePreview } from '@/components/sci-name';
 import { usePrompt } from '@/components/prompt';
 import { Sheet, SheetItem } from '@/components/sheet';
 import { TopBar } from '@/components/top-bar';
@@ -163,15 +164,12 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
         </View>
       )}
       <Field label={t('종소명 (선택)', 'Species (optional)', '種小名（任意）')} value={species} onChangeText={setSpecies} placeholder={t('예: echinolabium · 모르면 비워 두세요', 'e.g. echinolabium · leave empty if unknown', '例：echinolabium・不明なら空欄')} autoCapitalize="none" autoCorrect={false} maxLength={100} testID="plant-species" />
-      <Field label={t('품종·교배명 (선택)', 'Cultivar / grex (optional)', '品種・交配名（任意）')} value={cultivar} onChangeText={setCultivar} placeholder="Red Dragon" autoCorrect={false} maxLength={100} testID="plant-cultivar" />
-      <View style={styles.preview} testID="plant-name-preview">
-        <Txt size={11} color={C.muted}>
-          {t('저장될 이름', 'Saved as', '保存される名前')}
+      <Field label={t('추가 식별명 (선택)', 'Additional name (optional)', '追加識別名（任意）')} value={cultivar} onChangeText={setCultivar} placeholder={t('예: Red Dragon, Dwarf', 'e.g. Red Dragon, Dwarf', '例：Red Dragon, Dwarf')} autoCorrect={false} maxLength={100} testID="plant-cultivar" />
+      <NamePreview empty={name ? undefined : t('속을 입력하면 이름이 여기에 표시됩니다', 'The name appears here once you type the genus', '属を入力すると名前がここに表示されます')} testID="plant-name-preview">
+        <Txt italic size={16} testID="plant-name-preview-text">
+          {name}
         </Txt>
-        <Txt italic size={16} style={{ marginTop: 4 }}>
-          {name || '—'}
-        </Txt>
-      </View>
+      </NamePreview>
 
       <SectionHead>{t('원산지', 'ORIGIN', '原産地')}</SectionHead>
       <PlacePicker mode="origin" label={t('원산지', 'Origin', '原産地')} value={origin} onChange={setOrigin} testID="plant-origin" />
@@ -223,5 +221,4 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
 const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -6, marginBottom: 16 },
   chip: { borderWidth: 1, borderColor: '#C9C9C9', backgroundColor: C.white, paddingHorizontal: 10, paddingVertical: 6 },
-  preview: { backgroundColor: C.white, padding: 12, borderWidth: 1, borderColor: '#E5E5E5', marginBottom: 6 },
 });

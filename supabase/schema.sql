@@ -1,4 +1,4 @@
--- PLANT MATTER app — database schema (v0.1.1)
+-- PLANT MATTER app — database schema (v0.1.2)
 -- Run once in a NEW Supabase project: SQL Editor → paste everything → Run. Safe to run again.
 --
 -- What it creates
@@ -7,7 +7,8 @@
 --   app_admins        accounts that may post MATTER events and shops (managed here)
 --   plant_categories  "My Plants" categories, two levels
 --   plants            kept plants (genus = category, species, cultivar, origin, seed / pollen parents, photos)
---   finds             observations (genus / species, country or a whole region — no coordinates)
+--   finds             observations (name with cf./aff. and author, recorded by, country or region,
+--                     locality / coordinates hidden by default, elevation, habitat, occurrence ID)
 --   matter_events     plant events (anyone can read, admins write)
 --   matter_shops      shops and showrooms (anyone can read, admins write)
 --   storage           user-photos (private, owner only) and matter-media (public posters, admins upload)
@@ -169,7 +170,7 @@ grant select, insert, update, delete on public.plants to authenticated;
 drop trigger if exists plants_touch on public.plants;
 create trigger plants_touch before update on public.plants for each row execute function private.touch_updated_at();
 
--- 3. OBSERVATIONS (country or region only) ----------------------------------------------------------------------
+-- 3. OBSERVATIONS ----------------------------------------------------------------------------------
 create table if not exists public.finds (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -324,6 +325,72 @@ do $$ begin
 exception when unique_violation then
   raise notice 'Two categories of one account share a name. Rename one in the app (that merges them), then run this file again.';
 end $$;
+
+-- 9. v0.1.2 · OBSERVATIONS: FIELD RECORD ----------------------------------------------------------------------------
+-- cf. / aff., author, recorded by, locality and coordinates (hidden from others by default), elevation.
+alter table public.finds add column if not exists qualifier text;
+alter table public.finds add column if not exists authority text;
+alter table public.finds add column if not exists recorded_by text not null default '';
+alter table public.finds add column if not exists locality text not null default '';
+alter table public.finds add column if not exists latitude double precision;
+alter table public.finds add column if not exists longitude double precision;
+alter table public.finds add column if not exists location_private boolean not null default true;
+alter table public.finds add column if not exists elevation_m integer;
+alter table public.finds add column if not exists occurrence_id text;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'finds_field_record') then
+    alter table public.finds add constraint finds_field_record check (
+      (qualifier is null or qualifier in ('cf.', 'aff.'))
+      and (authority is null or char_length(authority) <= 100)
+      and char_length(recorded_by) <= 200
+      and char_length(locality) <= 300
+      and (latitude is null or latitude between -90 and 90)
+      and (longitude is null or longitude between -180 and 180)
+      and ((latitude is null) = (longitude is null))
+      and (elevation_m is null or elevation_m between -500 and 9000)
+      and (occurrence_id is null or occurrence_id ~ '^PM-[0-9]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$'));
+  end if;
+end $$;
+
+-- 10. v0.1.2 · OCCURRENCE ID ------------------------------------------------------------------------------------------
+-- PM-<year>-<6 letters/digits without 0, O, 1, I>. The app makes it at the first save (also offline);
+-- the database fills in any that is missing and keeps it unchanged afterwards.
+create or replace function private.new_occurrence_id(p_year int)
+returns text language plpgsql volatile security definer set search_path = '' as $$
+declare
+  letters constant text := '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  candidate text;
+begin
+  loop
+    candidate := 'PM-' || lpad(least(greatest(p_year, 0), 9999)::text, 4, '0') || '-';
+    for i in 1..6 loop
+      candidate := candidate || substr(letters, 1 + floor(random() * 32)::int, 1);
+    end loop;
+    exit when not exists (select 1 from public.finds f where f.occurrence_id = candidate);
+  end loop;
+  return candidate;
+end $$;
+revoke all on function private.new_occurrence_id(int) from public;
+grant execute on function private.new_occurrence_id(int) to authenticated;
+
+create or replace function private.keep_occurrence_id()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if tg_op = 'UPDATE' and old.occurrence_id is not null then
+    new.occurrence_id := old.occurrence_id;
+  end if;
+  if new.occurrence_id is null then
+    new.occurrence_id := private.new_occurrence_id(extract(year from coalesce(new.observed_on, current_date))::int);
+  end if;
+  return new;
+end $$;
+drop trigger if exists finds_occurrence_id on public.finds;
+create trigger finds_occurrence_id before insert or update on public.finds for each row execute function private.keep_occurrence_id();
+
+update public.finds set occurrence_id = private.new_occurrence_id(extract(year from observed_on)::int) where occurrence_id is null;
+create unique index if not exists finds_occurrence_id_key on public.finds (occurrence_id);
+alter table public.finds alter column occurrence_id set not null;
 
 notify pgrst, 'reload schema';
 

@@ -8,14 +8,19 @@ import { ChevronRight, Plus } from './icons';
 import { Txt } from './txt';
 
 /** Plant / find row with a square thumbnail, italic name and a small meta line. */
-export function ItemRow({ name, meta, thumb, onPress, badge, testID }: { name: string; meta?: string; thumb?: string; onPress: () => void; badge?: string; testID?: string }) {
+/** `name` is a string shown in italics, or an already typeset name (observations). */
+export function ItemRow({ name, meta, thumb, onPress, badge, testID }: { name: ReactNode; meta?: string; thumb?: string; onPress: () => void; badge?: string; testID?: string }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} accessibilityRole="button" testID={testID}>
       <View style={styles.thumb}>{thumb ? <Image source={{ uri: thumb }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Txt size={18} color="#BBB">✿</Txt>}</View>
       <View style={{ flex: 1 }}>
-        <Txt italic size={15} numberOfLines={2}>
-          {name}
-        </Txt>
+        {typeof name === 'string' ? (
+          <Txt italic size={15} numberOfLines={2}>
+            {name}
+          </Txt>
+        ) : (
+          name
+        )}
         {(!!meta || !!badge) && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
             {!!badge && (

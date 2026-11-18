@@ -54,3 +54,59 @@ export function parseName(name: string | null | undefined): { genus: string; spe
 
 export const displayName = (name: string | null | undefined, l: Locale) =>
   !name || name === UNIDENTIFIED ? tr(l, '이름 모름', 'Unidentified', '名前不明') : name;
+
+// ---------- observations: cf. / aff., authority and botanical typography ----------
+export type Qualifier = 'cf.' | 'aff.';
+export const QUALIFIERS: Qualifier[] = ['cf.', 'aff.'];
+const QUAL_RE = /^(cf|aff)\.?(\s+|$)/i;
+
+/** Author citation as typed ("J.J.Sm."), spaces tidied. */
+export const cleanAuthority = (raw: string | null | undefined) => (raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
+
+/** "cf. echinolabium" typed into the species box → qualifier cf. + species echinolabium. */
+export function splitQualifier(species: string | null | undefined, qualifier: Qualifier | null | undefined): { species: string; qualifier: Qualifier | null } {
+  let s = (species ?? '').replace(/\s+/g, ' ').trim();
+  let q: Qualifier | null = qualifier ?? null;
+  const m = s.match(QUAL_RE);
+  if (m) {
+    q = `${m[1].toLowerCase()}.` as Qualifier;
+    s = s.slice(m[0].length).trim();
+  }
+  return { species: s.slice(0, 100), qualifier: s ? q : null };
+}
+
+export type NamePiece = { text: string; italic: boolean };
+type FindParts = { genus?: string | null; qualifier?: Qualifier | null; species?: string | null; authority?: string | null };
+
+/**
+ * Observation name in pieces, typeset the botanical way: genus and epithet in italics; sp., cf., aff. and the
+ * author upright. cf./aff. and the author need a species epithet ("Bulbophyllum sp." takes neither).
+ *   Bulbophyllum cf. echinolabium J.J.Sm.  ·  Bulbophyllum sp.
+ */
+export function findNamePieces({ genus, qualifier, species, authority }: FindParts): NamePiece[] {
+  const g = normalizeGenus(genus);
+  const { species: s, qualifier: q } = splitQualifier(species, qualifier);
+  const a = cleanAuthority(authority);
+  if (!g && !s) return [];
+  const out: NamePiece[] = [];
+  if (g) out.push({ text: g, italic: true });
+  if (!s) {
+    out.push({ text: 'sp.', italic: false });
+    return out;
+  }
+  if (q) out.push({ text: q, italic: false });
+  out.push({ text: s, italic: true });
+  if (a) out.push({ text: a, italic: false });
+  return out;
+}
+export const piecesText = (pieces: NamePiece[]) => pieces.map((p) => p.text).join(' ');
+export const composeFindName = (parts: FindParts) => piecesText(findNamePieces(parts)).slice(0, 160);
+
+const UPRIGHT = new Set(['sp.', 'spp.', 'cf.', 'aff.', 'var.', 'subsp.', 'ssp.', 'f.', '×', 'x']);
+/** Pieces of a name stored as one text (observations from before v0.1.2): words in italics except sp., cf., aff. … */
+export function piecesOfName(name: string): NamePiece[] {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => ({ text: w, italic: !UPRIGHT.has(w.toLowerCase()) && !/^['‘’"“”(]/.test(w) }));
+}

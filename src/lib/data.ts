@@ -92,7 +92,8 @@ export function useShops() {
 // ---------- categories = genera ----------
 // v0.1.1: a plant's genus is its My Plants category. Typing a new genus creates the category; a genus
 // category that no longer holds any plant is removed, so the genus suggestions stay tidy.
-const MIGRATION = 'v0.1.1';
+// Every update file also carries the earlier ones, so the newest file is always the one to run.
+const MIGRATION = 'v0.1.2';
 /** Turn "column … does not exist" from an old database into a clear message. */
 export function schemaHint(e: unknown) {
   const m = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : String(e);
@@ -122,10 +123,11 @@ export async function ensureGenusCategory(uid: string, genus: string, cats: Cate
  * Rename a genus category and the genus of every plant in it (fixes a typo everywhere).
  * Renaming to a genus that already has a category merges the two.
  */
-export async function renameGenusCategory(cat: Category, newName: string, cats: Category[], plants: Plant[]) {
+/** Returns the id of the category the plants are in afterwards (another one when the rename merged two genera). */
+export async function renameGenusCategory(cat: Category, newName: string, cats: Category[], plants: Plant[]): Promise<string> {
   const db = need();
   const name = normalizeGenus(newName).slice(0, 40);
-  if (!name) return;
+  if (!name) return cat.id;
   const other = cats.find((c) => c.id !== cat.id && !c.parent_id && sameGenus(c.name, name));
   if (!other) {
     const { error } = await db.from('plant_categories').update({ name }).eq('id', cat.id);
@@ -138,6 +140,7 @@ export async function renameGenusCategory(cat: Category, newName: string, cats: 
     failSchema(res.error);
   }
   if (other) await db.from('plant_categories').delete().eq('id', cat.id);
+  return target;
 }
 
 /** Remove genus categories that hold no plants any more. */
@@ -227,10 +230,11 @@ export function categoryPath(cats: Category[], id: string | null | undefined) {
   return parent ? `${parent.name} › ${c.name}` : c.name;
 }
 /** Plants directly in a category plus those in its sub-categories. */
-export function countInTop(plants: Plant[], cats: Category[], topId: string) {
+export function plantsInTop(plants: Plant[], cats: Category[], topId: string) {
   const ids = new Set([topId, ...subCategories(cats, topId).map((s) => s.id)]);
-  return plants.filter((p) => p.category_id && ids.has(p.category_id)).length;
+  return plants.filter((p) => p.category_id && ids.has(p.category_id));
 }
+export const countInTop = (plants: Plant[], cats: Category[], topId: string) => plantsInTop(plants, cats, topId).length;
 export const unsortedPlants = (plants: Plant[], cats: Category[]) => {
   const ids = new Set(cats.map((c) => c.id));
   return plants.filter((p) => !p.category_id || !ids.has(p.category_id));
