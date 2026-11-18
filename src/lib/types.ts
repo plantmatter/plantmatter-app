@@ -37,6 +37,10 @@ export type Plant = {
   notes: string;
   photo_paths: string[];
   is_private: boolean;
+  /** Where it was bought (v0.1.3). */
+  shop: string;
+  /** Last watering (v0.1.3); "주기 리셋" sets it to today. */
+  last_watered_on: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -71,6 +75,24 @@ export type Find = {
   is_private: boolean;
   /** PM-2026-7K3QX9, made at the first save and never changed (v0.1.2). */
   occurrence_id: string | null;
+  // ---- v0.1.3: field record ----
+  observed_time: string | null;
+  /** A GROWTH_FORMS value or text typed by hand. */
+  growth_form: string;
+  substrate: string;
+  phenology: string | null;
+  illuminance_lux: number | null;
+  ppfd: number | null;
+  air_temp_c: number | null;
+  humidity_pct: number | null;
+  measured_on: string | null;
+  measured_time: string | null;
+  measurement_basis: string | null;
+  measurement_device: string;
+  field_number: string;
+  abundance: string | null;
+  associated_species: string;
+  voucher: string;
   created_at?: string;
   updated_at?: string;
 };

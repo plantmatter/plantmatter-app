@@ -70,3 +70,26 @@ export const mapsUrl = (address: string, locale: Locale) =>
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
 export const clean = (s: unknown, max = 2000) => (typeof s === 'string' ? s.trim().slice(0, max) : '');
+
+/** "14:04" → "오후 2:04" / "2:04 PM" / "午後2:04". */
+export function timeLabel(s: string | null | undefined, locale: Locale) {
+  const m = (s ?? '').match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  if (!m) return '';
+  const h = Number(m[1]);
+  const h12 = h % 12 || 12;
+  if (locale === 'en') return `${h12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+  if (locale === 'ja') return `${h < 12 ? '午前' : '午後'}${h12}:${m[2]}`;
+  return `${h < 12 ? '오전' : '오후'} ${h12}:${m[2]}`;
+}
+export const isTimeStr = (s: unknown): s is string => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+export const timeStr = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+/** Whole days from `from` (YYYY-MM-DD) to today, by the phone's calendar. */
+export function daysSince(from: string | null | undefined, today = todayStr()) {
+  if (!from || !isDateStr(from)) return null;
+  const [a, b] = [from, today].map((s) => {
+    const [y, m, d] = s.split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  });
+  return Math.round((b - a) / 86_400_000);
+}

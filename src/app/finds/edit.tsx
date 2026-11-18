@@ -5,22 +5,23 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { DateField } from '@/components/date-field';
+import { DateField, TimeField } from '@/components/date-field';
 import { MemberGate } from '@/components/gate';
+import { ChevronDown } from '@/components/icons';
 import { PhotoField } from '@/components/photos';
 import { PlacePicker, type PlaceValue } from '@/components/place-picker';
 import { NamePreview, SciName } from '@/components/sci-name';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
-import { Button, Field, Label, Loading, Page, ScreenTitle, SectionHead, Segmented, VisibilityField } from '@/components/ui';
+import { Button, ChoiceChips, Field, Label, Loading, Page, ScreenTitle, SectionHead, Segmented, VisibilityField } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { formatCoords, parseCoords, parseElevation } from '@/lib/coords';
+import { formatCoords, numText, parseCoords, parseDecimal, parseElevation } from '@/lib/coords';
 import { topCategories, useCategories, useFinds } from '@/lib/data';
 import { notify } from '@/lib/dialogs';
-import { isDateStr, todayStr } from '@/lib/format';
+import { isDateStr, isTimeStr, todayStr } from '@/lib/format';
 import { isCountry, regionOf } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
-import { ID_STATUSES, idStatusLabel } from '@/lib/labels';
+import { ABUNDANCE, GROWTH_FORMS, ID_STATUSES, idStatusLabel, MEASUREMENT_BASES, PHENOLOGY, presetText } from '@/lib/labels';
 import { cleanAuthority, composeFindName, displayName, findNamePieces, normalizeGenus, parseName, splitQualifier, UNIDENTIFIED, type Qualifier } from '@/lib/names';
 import { newOccurrenceId } from '@/lib/occurrence';
 import { queuedAsFind, saveFind, useOutbox } from '@/lib/outbox';
@@ -82,6 +83,25 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
   const [habitat, setHabitat] = useState(existing?.habitat ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [isPrivate, setIsPrivate] = useState(existing?.is_private ?? false);
+  // v0.1.3 field record
+  const [observedTime, setObservedTime] = useState(existing?.observed_time ?? '');
+  const [growthForm, setGrowthForm] = useState(existing?.growth_form ?? '');
+  const [substrate, setSubstrate] = useState(existing?.substrate ?? '');
+  const [phenology, setPhenology] = useState(existing?.phenology ?? '');
+  const [lux, setLux] = useState(numText(existing?.illuminance_lux));
+  const [ppfd, setPpfd] = useState(numText(existing?.ppfd));
+  const [temp, setTemp] = useState(numText(existing?.air_temp_c));
+  const [humidity, setHumidity] = useState(numText(existing?.humidity_pct));
+  const [measuredOn, setMeasuredOn] = useState(existing?.measured_on ?? '');
+  const [measuredTime, setMeasuredTime] = useState(existing?.measured_time ?? '');
+  const [basis, setBasis] = useState(existing?.measurement_basis ?? '');
+  const [device, setDevice] = useState(existing?.measurement_device ?? '');
+  const [fieldNumber, setFieldNumber] = useState(existing?.field_number ?? '');
+  const [abundance, setAbundance] = useState(existing?.abundance ?? '');
+  const [associated, setAssociated] = useState(existing?.associated_species ?? '');
+  const [voucher, setVoucher] = useState(existing?.voucher ?? '');
+  const [envOpen, setEnvOpen] = useState(() => !!existing && [existing.illuminance_lux, existing.ppfd, existing.air_temp_c, existing.humidity_pct, existing.measured_on, existing.measurement_basis, existing.measurement_device].some((v) => v != null && v !== ''));
+  const [colOpen, setColOpen] = useState(() => !!existing && [existing.field_number, existing.abundance, existing.associated_species, existing.voucher].some((v) => v != null && v !== ''));
   const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -98,6 +118,14 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
   const coordsValue = parseCoords(coords);
   const coordsBad = !!coords.trim() && !coordsValue;
   const elevationValue = parseElevation(elevation);
+  const numbers = {
+    lux: parseDecimal(lux, 0, 200000),
+    ppfd: parseDecimal(ppfd, 0, 3000),
+    temp: parseDecimal(temp, -50, 60),
+    humidity: parseDecimal(humidity, 0, 100),
+  };
+  const badNumber = (Object.keys(numbers) as (keyof typeof numbers)[]).find((k) => numbers[k] === 'invalid');
+  const num = (v: number | null | 'invalid') => (v === 'invalid' ? null : v);
 
   const locate = async () => {
     setLocating(true);
@@ -122,6 +150,11 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
     if (!isDateStr(observedOn)) return notify(t('관찰 일자를 골라 주세요', 'Choose the observation date', '観察日を選んでください'));
     if (coordsBad) return notify(t('좌표 형식을 확인해 주세요', 'Check the coordinates', '座標の形式を確認してください'), t('예: 6.0753, 116.5583 (위도, 경도)', 'e.g. 6.0753, 116.5583 (latitude, longitude)', '例：6.0753, 116.5583（緯度, 経度）'));
     if (elevationValue === 'invalid') return notify(t('해발고도를 확인해 주세요', 'Check the elevation', '標高を確認してください'), t('-500에서 9000 사이의 숫자(m)로 적어 주세요.', 'Use a number of metres between -500 and 9000.', '-500〜9000の数字（m）で入力してください。'));
+    if (badNumber)
+      return notify(
+        t('측정값을 확인해 주세요', 'Check the measurements', '測定値を確認してください'),
+        { lux: t('조도: 0–200000 lux', 'Light: 0–200000 lux', '照度：0–200000 lux'), ppfd: 'PPFD: 0–3000', temp: t('기온: -50–60 °C', 'Temperature: -50–60 °C', '気温：-50–60 °C'), humidity: t('상대습도: 0–100 %', 'Humidity: 0–100 %', '相対湿度：0–100 %') }[badNumber],
+      );
     setBusy(true);
     try {
       const id = existing?.id ?? randomUUID();
@@ -148,6 +181,22 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
           notes: notes.trim().slice(0, 2000),
           is_private: isPrivate,
           occurrence_id: existing?.occurrence_id ?? newOccurrenceId(observedOn, getRandomBytes),
+          observed_time: isTimeStr(observedTime) ? observedTime : null,
+          growth_form: growthForm.trim().slice(0, 60),
+          substrate: substrate.trim().slice(0, 100),
+          phenology: phenology || null,
+          illuminance_lux: num(numbers.lux),
+          ppfd: num(numbers.ppfd),
+          air_temp_c: num(numbers.temp),
+          humidity_pct: num(numbers.humidity),
+          measured_on: isDateStr(measuredOn) ? measuredOn : null,
+          measured_time: isDateStr(measuredOn) && isTimeStr(measuredTime) ? measuredTime : null,
+          measurement_basis: basis || null,
+          measurement_device: device.trim().slice(0, 100),
+          field_number: fieldNumber.trim().slice(0, 50),
+          abundance: abundance || null,
+          associated_species: associated.trim().slice(0, 300),
+          voucher: voucher.trim().slice(0, 200),
         },
         // Photos of a queued find are local copies; treat them as new uploads.
         photos.map((p) => (p.path && /^(file|content):/i.test(p.path) ? { key: p.key.split('/').pop()!.replace(/\.jpg$/, ''), uri: p.path } : p)),
@@ -226,8 +275,8 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
       <Segmented value={status} onChange={setStatus} options={ID_STATUSES.map((s) => ({ value: s, label: idStatusLabel(s, locale) }))} testID="find-status" />
 
       <SectionHead>{t('관찰 기록', 'FIELD RECORD', '観察記録')}</SectionHead>
-      <Field label={t('관찰자', 'Recorded By', '観察者')} value={recordedBy} onChangeText={setRecordedBy} maxLength={200} hint={t('함께 관찰했다면 이름을 이어서 적어 주세요.', 'Add names if you observed together.', '一緒に観察した人がいれば名前を続けて書いてください。')} testID="find-recorded-by" />
       <DateField label={t('관찰 일자', 'Observation Date', '観察日')} value={observedOn} onChange={setObservedOn} required testID="find-date" />
+      <TimeField label={t('발견 시각 (선택)', 'Time (optional)', '発見時刻（任意）')} value={observedTime} onChange={setObservedTime} testID="find-time" />
 
       <Label>{t('관찰 위치', 'Locality / Coordinates', '観察地点 / 座標')}</Label>
       <PlacePicker mode="find" label={t('나라·지역', 'Country or region', '国・地域')} value={place} onChange={setPlace} testID="find-country" />
@@ -271,18 +320,86 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
         hint={t('"현재 위치"를 쓰면 휴대폰이 알려 준 고도를 채웁니다. GPS 고도는 수십 m 차이가 날 수 있습니다.', '"Current location" fills the phone\'s altitude; GPS altitude can be off by tens of metres.', '「現在地」を使うと端末の高度を入力します。GPSの高度は数十mずれることがあります。')}
         testID="find-elevation"
       />
-      <Field label={t('서식 환경 (선택)', 'Habitat (optional)', '生育環境（任意）')} value={habitat} onChangeText={setHabitat} placeholder={t('예: 이끼 낀 바위, 계곡 옆', 'e.g. mossy rock by a stream', '例：苔むした岩、渓流沿い')} maxLength={200} testID="find-habitat" />
+      <ChoiceChips
+        label={t('생육 형태 (선택)', 'Growth form (optional)', '生育形態（任意）')}
+        value={growthForm}
+        onChange={setGrowthForm}
+        options={GROWTH_FORMS.map((g) => ({ value: g.value, label: presetText(g, locale) }))}
+        custom={{ label: t('직접 입력', 'Other', '直接入力'), placeholder: t('예: 반착생', 'e.g. semi-epiphytic', '例：半着生') }}
+        testID="find-growth"
+      />
+      <Field label={t('서식지 유형 (선택)', 'Habitat type (optional)', '生息地タイプ（任意）')} value={habitat} onChangeText={setHabitat} placeholder={t('예: 운무림, 계곡 옆', 'e.g. cloud forest, by a stream', '例：雲霧林、渓流沿い')} maxLength={200} testID="find-habitat" />
+      <Field label={t('기질 (선택)', 'Substrate (optional)', '基質（任意）')} value={substrate} onChangeText={setSubstrate} placeholder={t('예: 이끼, 나무껍질, 바위', 'e.g. moss, bark, rock', '例：苔、樹皮、岩')} maxLength={100} testID="find-substrate" />
+      <ChoiceChips
+        label={t('생육 상태 (선택)', 'Phenology (optional)', '生育状態（任意）')}
+        value={phenology}
+        onChange={setPhenology}
+        options={PHENOLOGY.map((g) => ({ value: g.value, label: presetText(g, locale) }))}
+        testID="find-phenology"
+      />
 
       <SectionHead>{t('관찰 사진', 'PHOTOGRAPHIC EVIDENCE', '観察写真')}</SectionHead>
       <PhotoField label={t('관찰 사진', 'Photographic Evidence', '観察写真')} photos={photos} onChange={setPhotos} max={FIND_PHOTO_LIMIT} resolve={resolve} testID="find-photos" />
       <Field label={t('현장 관찰 기록', 'Field Notes', 'フィールドノート')} value={notes} onChangeText={setNotes} multiline maxLength={2000} testID="find-notes" />
+
+      <FoldHead title={t('환경 측정 (선택)', 'ENVIRONMENTAL MEASUREMENTS (OPTIONAL)', '環境測定（任意）')} open={envOpen} onPress={() => setEnvOpen(!envOpen)} testID="find-env-toggle" />
+      {envOpen && (
+        <View testID="find-env">
+          <View style={styles.pair}>
+            <View style={{ flex: 1 }}>
+              <Field label={t('조도 (lux)', 'Light (lux)', '照度（lux）')} value={lux} onChangeText={setLux} keyboardType="decimal-pad" placeholder="850" maxLength={9} testID="find-lux" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Field label="PPFD (µmol/m²/s)" value={ppfd} onChangeText={setPpfd} keyboardType="decimal-pad" placeholder="25" maxLength={7} testID="find-ppfd" />
+            </View>
+          </View>
+          <View style={styles.pair}>
+            <View style={{ flex: 1 }}>
+              <Field label={t('기온 (°C)', 'Temperature (°C)', '気温（°C）')} value={temp} onChangeText={setTemp} keyboardType="numbers-and-punctuation" placeholder="23.5" maxLength={6} testID="find-temp" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Field label={t('상대습도 (%)', 'Humidity (%)', '相対湿度（%）')} value={humidity} onChangeText={setHumidity} keyboardType="decimal-pad" placeholder="88" maxLength={5} testID="find-humidity" />
+            </View>
+          </View>
+          <DateField label={t('측정 날짜', 'Measured on', '測定日')} value={measuredOn} onChange={setMeasuredOn} optional testID="find-measured-on" />
+          {!!measuredOn && <TimeField label={t('측정 시각', 'Measured at', '測定時刻')} value={measuredTime} onChange={setMeasuredTime} testID="find-measured-time" />}
+          <ChoiceChips label={t('측정 근거', 'Source', '測定根拠')} value={basis} onChange={setBasis} options={MEASUREMENT_BASES.map((g) => ({ value: g.value, label: presetText(g, locale) }))} testID="find-basis" />
+          <Field label={t('측정 장비', 'Device', '測定機器')} value={device} onChangeText={setDevice} placeholder={t('예: 장비 모델명', 'e.g. device model', '例：機器のモデル名')} maxLength={100} testID="find-device" />
+        </View>
+      )}
+
+      <FoldHead title={t('채집·연구 (선택)', 'COLLECTION & RESEARCH (OPTIONAL)', '採集・研究（任意）')} open={colOpen} onPress={() => setColOpen(!colOpen)} testID="find-col-toggle" />
+      {colOpen && (
+        <View testID="find-col">
+          <Field label={t('필드 번호', 'Field number', 'フィールド番号')} value={fieldNumber} onChangeText={setFieldNumber} placeholder={t('예: SB-0123 (내가 붙이는 번호)', 'e.g. SB-0123 (your own number)', '例：SB-0123（自分の番号）')} autoCapitalize="characters" maxLength={50} testID="find-field-number" />
+          <Field label={t('관찰자', 'Recorded By', '観察者')} value={recordedBy} onChangeText={setRecordedBy} maxLength={200} hint={t('함께 관찰했다면 이름을 이어서 적어 주세요.', 'Add names if you observed together.', '一緒に観察した人がいれば名前を続けて書いてください。')} testID="find-recorded-by" />
+          <ChoiceChips label={t('개체군', 'Abundance', '個体数')} value={abundance} onChange={setAbundance} options={ABUNDANCE.map((g) => ({ value: g.value, label: presetText(g, locale) }))} testID="find-abundance" />
+          <Field label={t('동반 식생', 'Associated species', '随伴植生')} value={associated} onChangeText={setAssociated} placeholder={t('예: Nepenthes, 이끼류', 'e.g. Nepenthes, mosses', '例：Nepenthes、コケ類')} maxLength={300} testID="find-associated" />
+          <Field label={t('표본·바우처', 'Voucher', '標本・証拠標本')} value={voucher} onChangeText={setVoucher} placeholder={t('예: 없음 / 사진만 / 표본 보관처', 'e.g. none / photos only / where it is kept', '例：なし / 写真のみ / 保管先')} maxLength={200} testID="find-voucher" />
+        </View>
+      )}
+
       <VisibilityField label={t('공개 설정', 'Visibility', '公開設定')} isPrivate={isPrivate} onChange={setIsPrivate} testID="find-visibility" />
       <Button label={t('저장', 'SAVE', '保存')} onPress={save} busy={busy} testID="find-save" />
     </View>
   );
 }
 
+/** Section that folds open: "환경 측정 (선택)  ∨". */
+function FoldHead({ title, open, onPress, testID }: { title: string; open: boolean; onPress: () => void; testID?: string }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ expanded: open }} style={styles.fold} testID={testID}>
+      <Txt weight="bold" size={11} style={{ letterSpacing: 1.6, flex: 1 }}>
+        {title}
+      </Txt>
+      <ChevronDown size={20} weight={1.6} up={open} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  pair: { flexDirection: 'row', gap: 10 },
+  fold: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: C.rule, paddingTop: 16, paddingBottom: 12, marginTop: 14, marginBottom: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -6, marginBottom: 16 },
   chip: { borderWidth: 1, borderColor: '#C9C9C9', backgroundColor: C.white, paddingHorizontal: 10, paddingVertical: 6 },
 });

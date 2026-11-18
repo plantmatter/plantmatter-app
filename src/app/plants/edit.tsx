@@ -14,7 +14,7 @@ import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
 import { Button, Field, Loading, Page, ScreenTitle, SectionHead, Segmented, SelectBox, VisibilityField } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { categoryPath, savePlant, topCategories, useCategories, usePlants, type PlantInput } from '@/lib/data';
+import { categoryPath, savePlant, topCategories, useCategories, usePlants, useShops, type PlantInput } from '@/lib/data';
 import { notify } from '@/lib/dialogs';
 import { useLocale } from '@/lib/i18n';
 import { ID_STATUSES, idStatusLabel } from '@/lib/labels';
@@ -71,6 +71,7 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
   const [seed, setSeed] = useState<Parent>(existing ? { id: existing.seed_parent_id, name: existing.seed_parent_name ?? '' } : NO_PARENT);
   const [pollen, setPollen] = useState<Parent>(existing ? { id: existing.pollen_parent_id, name: existing.pollen_parent_name ?? '' } : NO_PARENT);
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [shop, setShop] = useState(existing?.shop ?? '');
   const [isPrivate, setIsPrivate] = useState(existing?.is_private ?? false);
   const [nickname, setNickname] = useState(existing?.nickname ?? '');
   const [status, setStatus] = useState<IdStatus>(existing?.identification_status ?? 'unidentified');
@@ -84,6 +85,12 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
     .map((c) => c.name)
     .filter((g) => !typed || (g.toLowerCase().startsWith(typed) && g.toLowerCase() !== typed))
     .slice(0, 12);
+
+  // Shops: MATTER shop names and shops used before.
+  const matterShops = useShops().data ?? [];
+  const knownShops = [...new Set([...matterShops.map((x) => x.name), ...plants.map((x) => x.shop).filter(Boolean)])].sort((a, b) => a.localeCompare(b));
+  const shopTyped = shop.trim().toLowerCase();
+  const shopChoices = knownShops.filter((x) => !shopTyped || (x.toLowerCase().includes(shopTyped) && x.toLowerCase() !== shopTyped)).slice(0, 8);
 
   const pickParent = async (role: 'seed' | 'pollen', choice: Parent | 'custom') => {
     setSheet(null);
@@ -123,6 +130,8 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
         notes: notes.trim().slice(0, 2000),
         photo_paths,
         is_private: isPrivate,
+        shop: shop.replace(/\s+/g, ' ').trim().slice(0, 100),
+        last_watered_on: existing?.last_watered_on ?? null,
       };
       await savePlant(user.id, row, existing, cats, plants);
       await Promise.all([qc.invalidateQueries({ queryKey: ['plants'] }), qc.invalidateQueries({ queryKey: ['categories'] })]);
@@ -187,6 +196,16 @@ function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plan
         {t('모본: 씨를 맺은 쪽 · 부본: 꽃가루를 준 쪽. 비워 둬도 됩니다. 둘 다 고르고 종소명을 비우면 이름이 "모본 × 부본"이 됩니다.', 'Seed parent bears the seed, pollen parent gives the pollen. Both are optional. With both set and no species, the name becomes "seed × pollen".', '母本：種子をつけた側・父本：花粉を与えた側。空欄でも構いません。両方を選び種小名が空なら「母本 × 父本」になります。')}
       </Txt>
 
+      <Field label={t('구입처 (선택)', 'Shop (optional)', '購入先（任意）')} value={shop} onChangeText={setShop} placeholder={t('예: 책방의 게코', 'e.g. a shop name', '例：ショップ名')} maxLength={100} hint={knownShops.length ? t('아래 버튼으로 MATTER 매장이나 전에 쓴 구입처를 고를 수 있습니다.', 'Tap a button below for a MATTER shop or a shop used before.', '下のボタンでMATTERのショップや以前の購入先を選べます。') : undefined} testID="plant-shop" />
+      {!!shopChoices.length && (
+        <View style={styles.chips} testID="shop-choices">
+          {shopChoices.map((x) => (
+            <Pressable key={x} onPress={() => setShop(x)} style={styles.chip} accessibilityRole="button" testID={`shop-choice-${x}`}>
+              <Txt size={13}>{x}</Txt>
+            </Pressable>
+          ))}
+        </View>
+      )}
       <Field label={t('메모', 'Notes', 'メモ')} value={notes} onChangeText={setNotes} multiline maxLength={2000} testID="plant-notes" />
       <VisibilityField label={t('공개 설정', 'Visibility', '公開設定')} isPrivate={isPrivate} onChange={setIsPrivate} testID="plant-visibility" />
 

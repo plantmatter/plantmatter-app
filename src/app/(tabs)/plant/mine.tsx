@@ -46,11 +46,11 @@ function Collections() {
 
   return (
     <View>
-      <BigRow title="All" count={plants.length} empty={!plants.length} lined={false} onPress={() => openCollection('all')} testID="cat-all" />
+      <BigRow title="All" count={plants.length} empty={!plants.length} onPress={() => openCollection('all')} testID="cat-all" />
       {genera.map(({ cat, n }) => (
-        <BigRow key={cat.id} title={cat.name} count={n} lined={false} onPress={() => openCollection(cat.id)} testID={`cat-${cat.name}`} />
+        <BigRow key={cat.id} title={cat.name} count={n} onPress={() => openCollection(cat.id)} testID={`cat-${cat.name}`} />
       ))}
-      {!!unsorted.length && <BigRow title={t('미분류', 'Unsorted', '未分類')} count={unsorted.length} lined={false} onPress={() => openCollection('unsorted')} testID="cat-unsorted" />}
+      {!!unsorted.length && <BigRow title={t('미분류', 'Unsorted', '未分類')} count={unsorted.length} onPress={() => openCollection('unsorted')} testID="cat-unsorted" />}
       <AllTotal n={plants.length} />
     </View>
   );

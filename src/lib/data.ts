@@ -93,7 +93,7 @@ export function useShops() {
 // v0.1.1: a plant's genus is its My Plants category. Typing a new genus creates the category; a genus
 // category that no longer holds any plant is removed, so the genus suggestions stay tidy.
 // Every update file also carries the earlier ones, so the newest file is always the one to run.
-const MIGRATION = 'v0.1.2';
+const MIGRATION = 'v0.1.3';
 /** Turn "column … does not exist" from an old database into a clear message. */
 export function schemaHint(e: unknown) {
   const m = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : String(e);
@@ -171,6 +171,11 @@ export async function deletePlant(p: Plant, cats: Category[], plants: Plant[]) {
   fail(error);
   await removePhotos(USER_BUCKET, p.photo_paths);
   await dropEmptyCategories(cats, plants.filter((x) => x.id !== p.id)).catch(() => {});
+}
+/** "주기 리셋": record today's watering. */
+export async function setWatered(id: string, day: string) {
+  const { error } = await need().from('plants').update({ last_watered_on: day }).eq('id', id);
+  failSchema(error);
 }
 export async function setPlantPrivate(id: string, value: boolean) {
   const { error } = await need().from('plants').update({ is_private: value }).eq('id', id);

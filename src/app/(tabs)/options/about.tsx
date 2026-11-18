@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 
@@ -6,17 +5,18 @@ import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
 import { BigRow, Page, ScreenTitle } from '@/components/ui';
 import { useLocale } from '@/lib/i18n';
+import { nativeVersion, RELEASE } from '@/lib/release';
 import { C } from '@/lib/theme';
 
 export default function AboutScreen() {
   const { t } = useLocale();
-  const version = Constants.expoConfig?.version ?? '0.1.0';
+  const app = nativeVersion();
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <TopBar />
       <Page testID="about-screen">
         <ScreenTitle sub={t('내가 키우는 식물과 관찰한 식물을 기록하고, 식물 행사와 매장을 소개합니다.', 'Record the plants you keep and the plants you observe, and discover plant events and shops.', '育てている植物と観察した植物を記録し、植物イベントやショップを紹介します。')}>PLANT MATTER</ScreenTitle>
-        <Txt size={13} color={C.sub} testID="app-version">{`v${version} · BETA`}</Txt>
+        <Txt size={13} color={C.sub} testID="app-version">{`v${RELEASE} · BETA${app && app !== RELEASE ? ` (app ${app})` : ''}`}</Txt>
         <View style={{ marginTop: 24 }}>
           <BigRow title={t('이용약관', 'Terms', '利用規約')} onPress={() => router.push('/options/legal?doc=terms')} testID="about-terms" />
           <BigRow title={t('개인정보', 'Privacy', 'プライバシー')} onPress={() => router.push('/options/legal?doc=privacy')} testID="about-privacy" />

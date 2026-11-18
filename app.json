@@ -10,7 +10,6 @@
     "backgroundColor": "#F4F4F4",
     "ios": {
       "bundleIdentifier": "com.plantmatter.app",
-      "buildNumber": "1",
       "supportsTablet": false,
       "usesAppleSignIn": true,
       "infoPlist": {
@@ -20,7 +19,6 @@
     },
     "android": {
       "package": "com.plantmatter.app",
-      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/adaptive-icon.png",

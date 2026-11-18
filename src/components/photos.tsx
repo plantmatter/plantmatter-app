@@ -8,7 +8,7 @@ import { chooseAsync, notify } from '@/lib/dialogs';
 import { useLocale } from '@/lib/i18n';
 import { pickPhotos, type FormPhoto } from '@/lib/photos';
 import { moveItem, slotAt, slotXY } from '@/lib/reorder';
-import { C } from '@/lib/theme';
+import { C, GUTTER } from '@/lib/theme';
 
 import { Plus } from './icons';
 import { Txt } from './txt';
@@ -196,14 +196,14 @@ function PhotoTile({ src, cover, slot, start, dragging, tx, ty, onStart, onMove,
 }
 
 /** Swipeable photos with an "n/m" counter. */
-export function PhotoPager({ uris, aspect = 4 / 5, testID }: { uris: string[]; aspect?: number; testID?: string }) {
+export function PhotoPager({ uris, aspect = 4 / 5, flush, testID }: { uris: string[]; aspect?: number; flush?: boolean; testID?: string }) {
   const { width } = useWindowDimensions();
   const w = Math.min(width, 720);
   const [index, setIndex] = useState(0);
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setIndex(Math.round(e.nativeEvent.contentOffset.x / Math.max(1, w)));
   if (!uris.length) return null;
   return (
-    <View style={{ width: w, alignSelf: 'center', marginBottom: 18 }} testID={testID}>
+    <View style={{ width: w, alignSelf: 'center', marginBottom: 18, marginTop: flush ? -GUTTER : 0 }} testID={testID}>
       <FlatList
         data={uris}
         horizontal

@@ -70,3 +70,13 @@ export function SearchIcon({ size = 24, color = C.ink, weight = 1.5 }: { size?: 
     </Svg>
   );
 }
+
+/** ∨ / ^ for "show more" toggles. */
+export function ChevronDown({ size = 26, color = C.ink, weight = 2, up = false }: P & { up?: boolean }) {
+  const s = size * 0.42;
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: s, height: s, borderRightWidth: weight, borderBottomWidth: weight, borderColor: color, transform: [{ translateY: up ? s * 0.25 : -s * 0.25 }, { rotate: up ? '225deg' : '45deg' }] }} />
+    </View>
+  );
+}

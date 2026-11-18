@@ -8,16 +8,25 @@ import { ChevronRight, Plus } from './icons';
 import { Txt } from './txt';
 
 /** Plant / find row with a square thumbnail, italic name and a small meta line. */
-/** `name` is a string shown in italics, or an already typeset name (observations). */
-export function ItemRow({ name, meta, thumb, onPress, badge, testID }: { name: ReactNode; meta?: string; thumb?: string; onPress: () => void; badge?: string; testID?: string }) {
+/**
+ * `name` is a string (italic, or bold upright with `strong`) or an already typeset name (observations).
+ * `strong`: the roomier My Plants list row — bold name, bigger ›, light lines.
+ */
+export function ItemRow({ name, meta, thumb, onPress, badge, strong, testID }: { name: ReactNode; meta?: string; thumb?: string; onPress: () => void; badge?: string; strong?: boolean; testID?: string }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]} accessibilityRole="button" testID={testID}>
-      <View style={styles.thumb}>{thumb ? <Image source={{ uri: thumb }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Txt size={18} color="#BBB">✿</Txt>}</View>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, strong && styles.rowStrong, pressed && { opacity: 0.6 }]} accessibilityRole="button" testID={testID}>
+      <View style={[styles.thumb, strong && styles.thumbStrong]}>{thumb ? <Image source={{ uri: thumb }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Txt size={18} color="#BBB">✿</Txt>}</View>
       <View style={{ flex: 1 }}>
         {typeof name === 'string' ? (
-          <Txt italic size={15} numberOfLines={2}>
-            {name}
-          </Txt>
+          strong ? (
+            <Txt weight="bold" size={16} numberOfLines={2} style={{ lineHeight: 21 }}>
+              {name}
+            </Txt>
+          ) : (
+            <Txt italic size={15} numberOfLines={2}>
+              {name}
+            </Txt>
+          )
         ) : (
           name
         )}
@@ -38,7 +47,7 @@ export function ItemRow({ name, meta, thumb, onPress, badge, testID }: { name: R
           </View>
         )}
       </View>
-      <ChevronRight />
+      {strong ? <ChevronRight size={24} weight={1.8} color={C.ink} /> : <ChevronRight />}
     </Pressable>
   );
 }
@@ -62,7 +71,9 @@ export function Nest({ children, light }: { children: ReactNode; light?: boolean
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#E1E1E1' },
+  rowStrong: { paddingVertical: 14, gap: 14, borderBottomColor: C.hair },
   thumb: { width: 48, height: 48, backgroundColor: '#E9E9E9', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  thumbStrong: { width: 52, height: 52 },
   badge: { backgroundColor: '#6B6B6B', paddingHorizontal: 5, paddingVertical: 1 },
   nest: { marginLeft: 2, marginTop: 4, marginBottom: 14, paddingLeft: 14, borderLeftWidth: 1, borderLeftColor: C.hair },
   nestLight: { borderLeftWidth: 1, borderLeftColor: C.hair, marginBottom: 8, paddingLeft: 12 },

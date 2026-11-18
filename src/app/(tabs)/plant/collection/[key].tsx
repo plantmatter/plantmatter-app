@@ -78,11 +78,11 @@ function Collection({ id }: { id: string }) {
 
   return (
     <View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 4 }} testID="collection-title">
-        <Txt weight="bold" size={36} style={{ letterSpacing: -0.9, lineHeight: 44, flexShrink: 1 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 4 }} testID="collection-title">
+        <Txt weight="bold" size={40} style={{ letterSpacing: -1, lineHeight: 48, flexShrink: 1 }}>
           {title}
         </Txt>
-        <Txt size={12} color={C.muted} style={{ marginLeft: 6, marginTop: 5 }} testID="collection-count">
+        <Txt size={12} color={C.muted} style={{ marginLeft: 7, marginBottom: 9 }} testID="collection-count">
           ({inHere.length})
         </Txt>
       </View>
@@ -101,8 +101,10 @@ function Collection({ id }: { id: string }) {
             {t('찾는 식물이 없습니다.', 'No plant matches.', '該当する植物がありません。')}
           </Txt>
         )}
+        {shown.length > 0 && <View style={{ borderTopWidth: 1, borderTopColor: C.hair }} />}
         {shown.map((p) => (
           <ItemRow
+            strong
             key={p.id}
             name={p.scientific_name}
             meta={[p.nickname, p.identification_status === 'verified' ? idStatusLabel('verified', locale) : '', originLabel(p.origin_region, p.origin_place, locale)].filter(Boolean).join(' · ')}

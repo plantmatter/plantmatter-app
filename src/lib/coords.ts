@@ -42,3 +42,13 @@ export function parseElevation(text: string | null | undefined): number | null |
   const v = Math.round(Number(src));
   return v < -500 || v > 9000 ? 'invalid' : v;
 }
+
+/** A decimal number between min and max ("23.5", "1,200"); null when empty. */
+export function parseDecimal(text: string | null | undefined, min: number, max: number): number | null | 'invalid' {
+  const src = (text ?? '').replace(/[,\s]/g, '');
+  if (!src) return null;
+  if (!/^-?\d+(\.\d+)?$/.test(src)) return 'invalid';
+  const v = Number(src);
+  return v < min || v > max ? 'invalid' : Math.round(v * 100) / 100;
+}
+export const numText = (v: number | null | undefined) => (v == null ? '' : String(v));

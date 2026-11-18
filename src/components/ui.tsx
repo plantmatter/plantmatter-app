@@ -43,12 +43,12 @@ export function ScreenTitle({ children, sub }: { children: string; sub?: string 
 export function BigRow({ title, count, sub, empty, onPress, lined = true, badge, testID }: { title: string; count?: number | null; sub?: string; empty?: boolean; onPress?: () => void; lined?: boolean; badge?: string; testID?: string }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.bigRow, lined && styles.bigRowLined, pressed && { opacity: 0.6 }]} accessibilityRole="button" testID={testID}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <Txt weight="bold" size={32} color={empty ? C.faint : C.ink} style={{ letterSpacing: -0.8, lineHeight: 38, flexShrink: 1 }}>
           {title}
         </Txt>
         {count !== undefined && count !== null && (
-          <Txt size={12} color={empty ? '#C6C6C6' : C.muted} style={{ marginLeft: 6, marginTop: 4 }}>
+          <Txt size={12} color={empty ? '#C6C6C6' : C.muted} style={{ marginLeft: 7, marginBottom: 7 }} testID={testID ? `${testID}-count` : undefined}>
             ({count})
           </Txt>
         )}
@@ -250,9 +250,11 @@ export function Loading() {
 }
 
 const styles = StyleSheet.create({
+  chip: { borderWidth: 1, borderColor: '#C9C9C9', backgroundColor: C.white, paddingHorizontal: 12, paddingVertical: 7 },
+  chipOn: { backgroundColor: C.ink, borderColor: C.ink },
   bigRow: { paddingVertical: 12 },
   bigRowLined: { borderBottomWidth: 1, borderBottomColor: C.hair, paddingTop: 14, paddingBottom: 12 },
-  badge: { marginLeft: 6, marginTop: 6, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: C.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  badge: { alignSelf: 'flex-start', marginLeft: 6, marginTop: 6, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: C.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   button: { minHeight: 46, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   buttonSmall: { minHeight: 34, paddingHorizontal: 10 },
   input: { backgroundColor: C.white, borderWidth: 1, borderColor: '#DDDDDD', minHeight: 46, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: C.ink },
@@ -265,3 +267,63 @@ const styles = StyleSheet.create({
   warning: { backgroundColor: '#FAF8F4', borderWidth: 1, borderColor: '#ECE4D5' },
   infoRow: { flexDirection: 'row', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#EAEAEA', alignItems: 'flex-start' },
 });
+
+/**
+ * One choice from a few chips (tap again to clear). With `custom`, a last chip "직접 입력" opens a text box;
+ * the stored value is then the typed text.
+ */
+export function ChoiceChips({ label, value, options, onChange, custom, testID }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void; custom?: { label: string; placeholder: string }; testID?: string }) {
+  const isPreset = !value || options.some((o) => o.value === value);
+  const [typing, setTyping] = useState(!isPreset);
+  return (
+    <View style={{ marginBottom: 16 }} testID={testID}>
+      <Label>{label}</Label>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {options.map((o) => {
+          const on = !typing && o.value === value;
+          return (
+            <Pressable
+              key={o.value}
+              onPress={() => {
+                setTyping(false);
+                onChange(on ? '' : o.value);
+              }}
+              style={[styles.chip, on && styles.chipOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              testID={testID ? `${testID}-${o.value}` : undefined}>
+              <Txt size={13} weight={on ? 'bold' : 'light'} color={on ? C.white : C.ink}>
+                {o.label}
+              </Txt>
+            </Pressable>
+          );
+        })}
+        {custom && (
+          <Pressable
+            onPress={() => {
+              if (typing) onChange('');
+              setTyping(!typing);
+            }}
+            style={[styles.chip, typing && styles.chipOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: typing }}
+            testID={testID ? `${testID}-custom` : undefined}>
+            <Txt size={13} weight={typing ? 'bold' : 'light'} color={typing ? C.white : C.ink}>
+              {custom.label}
+            </Txt>
+          </Pressable>
+        )}
+      </View>
+      {custom && typing && (
+        <TextInput
+          value={isPreset ? '' : value}
+          onChangeText={(v) => onChange(v.slice(0, 60))}
+          placeholder={custom.placeholder}
+          placeholderTextColor="#A8A8A8"
+          style={[styles.input, fontFor(value || custom.placeholder), { marginTop: 8 }]}
+          testID={testID ? `${testID}-input` : undefined}
+        />
+      )}
+    </View>
+  );
+}
