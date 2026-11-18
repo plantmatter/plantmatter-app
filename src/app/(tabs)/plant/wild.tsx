@@ -15,6 +15,7 @@ import { dayLabel } from '@/lib/format';
 import { placeName, regionName, regionOf } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { idStatusLabel } from '@/lib/labels';
+import { displayName } from '@/lib/names';
 import { flushOutbox, queuedAsFind, useOutbox } from '@/lib/outbox';
 import { useSignedUrls } from '@/lib/photos';
 import { errorText } from '@/lib/supabase';
@@ -22,14 +23,16 @@ import { C } from '@/lib/theme';
 import type { Find } from '@/lib/types';
 
 const NO_COUNTRY = '__none';
+/** Observations recorded for a whole region (no country). */
+const WHOLE_REGION = '__region';
 
-export default function WildFinds() {
+export default function MyObservations() {
   const { t } = useLocale();
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <TopBar onAdd={() => router.push('/finds/edit')} addLabel={t('발견 기록 추가', 'Add a find', '発見を追加')} />
+      <TopBar onAdd={() => router.push('/finds/edit')} addLabel={t('관찰 기록 추가', 'Add an observation', '観察を追加')} />
       <Page testID="wild-screen">
-        <MemberGate what={t('야생 발견 기록', 'Wild Finds', '野外発見の記録')}>
+        <MemberGate what={t('관찰 기록', 'My Observations', '観察記録')}>
           <FindsByRegion />
         </MemberGate>
       </Page>
@@ -62,8 +65,8 @@ function FindsByRegion() {
   // region → country → finds
   const groups = new Map<string, Map<string, Row[]>>();
   for (const f of all) {
-    const region = (f.country_code && regionOf(f.country_code)) || NO_COUNTRY;
-    const country = f.country_code || NO_COUNTRY;
+    const region = f.region || (f.country_code && regionOf(f.country_code)) || NO_COUNTRY;
+    const country = f.country_code || (region !== NO_COUNTRY ? WHOLE_REGION : NO_COUNTRY);
     if (!groups.has(region)) groups.set(region, new Map());
     const byCountry = groups.get(region)!;
     byCountry.set(country, [...(byCountry.get(country) ?? []), f]);
@@ -110,7 +113,7 @@ function FindsByRegion() {
         </Notice>
       )}
       {!all.length && (
-        <Notice>{t('아직 발견 기록이 없습니다. 오른쪽 위 ＋로 첫 기록을 남겨 보세요.', 'No finds yet. Tap ＋ at the top right to add your first one.', 'まだ記録がありません。右上の＋から最初の記録を追加しましょう。')}</Notice>
+        <Notice>{t('아직 관찰 기록이 없습니다. 오른쪽 위 ＋로 첫 기록을 남겨 보세요.', 'No observations yet. Tap ＋ at the top right to add your first one.', 'まだ観察記録がありません。右上の＋から最初の記録を追加しましょう。')}</Notice>
       )}
       {order.map((region) => {
         const byCountry = groups.get(region)!;
@@ -123,23 +126,29 @@ function FindsByRegion() {
             {open && (
               <Nest>
                 {[...byCountry.entries()]
-                  .sort((a, b) => placeName(a[0], locale).localeCompare(placeName(b[0], locale)))
+                  .sort((a, b) => (a[0] === WHOLE_REGION ? -1 : b[0] === WHOLE_REGION ? 1 : placeName(a[0], locale).localeCompare(placeName(b[0], locale))))
                   .map(([country, list]) => {
                     const key = `${region}:${country}`;
                     const cOpen = openCountry.has(key) || byCountry.size === 1;
                     return (
                       <View key={key}>
                         {byCountry.size > 1 || country !== NO_COUNTRY ? (
-                          <SubRow title={country === NO_COUNTRY ? t('나라 미지정', 'No country', '国未設定') : placeName(country, locale)} count={list.length} open={cOpen} onPress={() => toggle(openCountry, key, setOpenCountry)} testID={`country-${country}`} />
+                          <SubRow
+                            title={country === NO_COUNTRY ? t('나라 미지정', 'No country', '国未設定') : country === WHOLE_REGION ? t('지역 전체', 'Whole region', '地域全体') : placeName(country, locale)}
+                            count={list.length}
+                            open={cOpen}
+                            onPress={() => toggle(openCountry, key, setOpenCountry)}
+                            testID={`country-${country === WHOLE_REGION ? `${region}-all` : country}`}
+                          />
                         ) : null}
                         {cOpen && (
                           <Nest light>
                             {list.map((f) => (
                               <ItemRow
                                 key={f.id}
-                                name={f.scientific_name}
+                                name={displayName(f.scientific_name, locale)}
                                 meta={[dayLabel(f.observed_on, locale), idStatusLabel(f.identification_status, locale)].join(' · ')}
-                                badge={f.pending ? t('업로드 대기', 'WAITING', '送信待ち') : f.is_private ? t('나만 보기', 'PRIVATE', '非公開') : undefined}
+                                badge={f.pending ? t('업로드 대기', 'WAITING', '送信待ち') : f.is_private ? t('비공개', 'PRIVATE', '非公開') : undefined}
                                 thumb={resolve(f.photo_paths[0])}
                                 onPress={() => router.push(`/finds/${f.id}`)}
                                 testID={`find-row-${f.id}`}

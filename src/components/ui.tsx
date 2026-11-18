@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, TextInput, View, type TextInputProps, type ViewStyle } from 'react-native';
 
+import { useLocale } from '@/lib/i18n';
 import { C, GUTTER } from '@/lib/theme';
 
 import { ChevronRight } from './icons';
@@ -61,13 +62,14 @@ export function BigRow({ title, count, sub, empty, onPress, lined = true, badge,
   );
 }
 
+/** Big "All" count. The line height leaves room for the glyphs so iOS does not clip the number. */
 export function AllTotal({ n }: { n: number }) {
   return (
-    <View style={{ alignItems: 'flex-end', marginTop: 34 }} testID="all-total">
-      <Txt size={12} color="#666" style={{ marginRight: 4 }}>
+    <View style={{ alignItems: 'flex-end', marginTop: 34, marginBottom: 24 }} testID="all-total">
+      <Txt size={12} color="#666" style={{ marginRight: 6 }}>
         All
       </Txt>
-      <Txt weight="black" size={96} style={{ letterSpacing: -4, lineHeight: 96 }}>
+      <Txt weight="black" size={88} numberOfLines={1} style={{ letterSpacing: -2, lineHeight: 112, paddingRight: 4, includeFontPadding: false }} testID="all-total-number">
         {String(n)}
       </Txt>
     </View>
@@ -156,6 +158,28 @@ export function Segmented<T extends string>({ value, options, onChange, testID }
   );
 }
 
+/** Public / private choice for a record. Sharing arrives in v0.2; until then every record is visible to its owner only. */
+export function VisibilityField({ isPrivate, onChange, label, testID }: { isPrivate: boolean; onChange: (isPrivate: boolean) => void; label: string; testID?: string }) {
+  const { t } = useLocale();
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Label>{label}</Label>
+      <Segmented
+        value={isPrivate ? 'private' : 'public'}
+        onChange={(v) => onChange(v === 'private')}
+        options={[
+          { value: 'public', label: t('공개', 'Public', '公開') },
+          { value: 'private', label: t('비공개', 'Private', '非公開') },
+        ]}
+        testID={testID}
+      />
+      <Txt size={10} color={C.muted} style={{ marginTop: -8, lineHeight: 15 }}>
+        {t('공개 설정은 친구·도감 기능이 생기는 다음 버전부터 적용됩니다. 지금은 모든 기록이 나에게만 보입니다.', 'Visibility applies once sharing (friends, dex) arrives in the next version. For now every record is visible to you only.', '公開設定は友だち・図鑑機能が加わる次のバージョンから適用されます。今はすべての記録が自分だけに表示されます。')}
+      </Txt>
+    </View>
+  );
+}
+
 export function ToggleRow({ label, sub, value, onChange, testID }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void; testID?: string }) {
   return (
     <View style={styles.toggle}>
@@ -220,7 +244,7 @@ export function Loading() {
 
 const styles = StyleSheet.create({
   bigRow: { paddingVertical: 12 },
-  bigRowLined: { borderBottomWidth: 1.5, borderBottomColor: C.rule, paddingTop: 14, paddingBottom: 12 },
+  bigRowLined: { borderBottomWidth: 1, borderBottomColor: C.hair, paddingTop: 14, paddingBottom: 12 },
   badge: { marginLeft: 6, marginTop: 6, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: C.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   button: { minHeight: 46, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   buttonSmall: { minHeight: 34, paddingHorizontal: 10 },

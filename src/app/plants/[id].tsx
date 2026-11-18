@@ -8,7 +8,7 @@ import { PhotoPager } from '@/components/photos';
 import { ItemRow } from '@/components/rows';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
-import { Button, InfoRow, Loading, Notice, Page, SectionHead, ToggleRow } from '@/components/ui';
+import { Button, InfoRow, Loading, Notice, Page, SectionHead, VisibilityField } from '@/components/ui';
 import { categoryPath, deletePlant, setPlantPrivate, useCategories, usePlants } from '@/lib/data';
 import { confirmAsync, notify } from '@/lib/dialogs';
 import { originLabel } from '@/lib/geo';
@@ -79,8 +79,8 @@ function PlantDetail({ id }: { id: string }) {
     if (!ok) return;
     setBusy(true);
     try {
-      await deletePlant(plant);
-      await qc.invalidateQueries({ queryKey: ['plants'] });
+      await deletePlant(plant, cats, plants);
+      await Promise.all([qc.invalidateQueries({ queryKey: ['plants'] }), qc.invalidateQueries({ queryKey: ['categories'] })]);
       router.back();
     } catch (e) {
       notify(t('삭제하지 못했습니다', 'Could not delete', '削除できませんでした'), errorText(e));
@@ -91,7 +91,7 @@ function PlantDetail({ id }: { id: string }) {
   return (
     <View>
       <Txt size={10} color={C.muted} style={{ letterSpacing: 1.2, marginBottom: 10 }}>
-        {['PLANT', categoryPath(cats, p.category_id) || t('미분류', 'Unsorted', '未分類')].join(' / ')}
+        {['MY PLANTS', categoryPath(cats, p.category_id) || t('미분류', 'Unsorted', '未分類')].join(' / ')}
       </Txt>
       <PhotoPager uris={p.photo_paths.map((x) => resolve(x))} testID="plant-photos-view" />
       <Txt italic size={26} style={{ lineHeight: 32 }} testID="plant-title">
@@ -103,7 +103,7 @@ function PlantDetail({ id }: { id: string }) {
         </Txt>
       )}
       <View style={{ marginTop: 18 }}>
-        <InfoRow label={t('분류', 'Category', '分類')} value={categoryPath(cats, p.category_id) || t('미분류', 'Unsorted', '未分類')} testID="plant-info-category" />
+        <InfoRow label={t('속', 'Genus', '属')} value={categoryPath(cats, p.category_id) || p.genus || t('미분류', 'Unsorted', '未分類')} testID="plant-info-category" />
         <InfoRow label={t('동정', 'ID', '同定')} value={idStatusLabel(p.identification_status, locale)} />
         <InfoRow label={t('원산지', 'Origin', '原産地')} value={originLabel(p.origin_region, p.origin_place, locale)} testID="plant-info-origin" />
         {parent(p.seed_parent_id, p.seed_parent_name, t('모본 (♀)', 'Seed (♀)', '母本 (♀)'), 'plant-info-seed')}
@@ -130,7 +130,7 @@ function PlantDetail({ id }: { id: string }) {
         </View>
       )}
       <View style={{ marginTop: 24 }}>
-        <ToggleRow label={t('나만 보기', 'Only me', '自分だけ')} value={p.is_private} onChange={togglePrivate} testID="plant-private-toggle" />
+        <VisibilityField label={t('공개 설정', 'Visibility', '公開設定')} isPrivate={p.is_private} onChange={togglePrivate} testID="plant-visibility-detail" />
       </View>
       <Button kind="danger" label={t('삭제', 'Delete', '削除')} onPress={() => remove(p)} busy={busy} testID="plant-delete" />
     </View>

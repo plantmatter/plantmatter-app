@@ -21,7 +21,11 @@ export type Plant = {
   id: string;
   owner_id: string;
   category_id: string | null;
+  /** Shown name, composed from genus / species / cultivar (or "seed × pollen"). */
   scientific_name: string;
+  genus: string | null;
+  species: string | null;
+  cultivar: string | null;
   nickname: string;
   identification_status: IdStatus;
   origin_region: string | null;
@@ -41,7 +45,11 @@ export type Find = {
   id: string;
   owner_id: string;
   scientific_name: string;
+  genus: string | null;
+  species: string | null;
   identification_status: IdStatus;
+  /** Broad region; set alone when only the region is known ("all of Southeast Asia"). */
+  region: string | null;
   country_code: string | null;
   observed_on: string;
   habitat: string;

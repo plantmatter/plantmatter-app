@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useQuery, type QueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from './auth';
-import { tr, type Locale } from './locale';
+import { composeName, normalizeGenus, sameGenus } from './names';
 import { removePhotos } from './photos';
 import { MEDIA_BUCKET, supabase, USER_BUCKET } from './supabase';
 import type { Category, Find, MatterEvent, MatterShop, Plant } from './types';
@@ -89,71 +89,85 @@ export function useShops() {
   });
 }
 
-// ---------- categories ----------
-export const DEFAULT_CATEGORIES = (l: Locale) => [
-  'Orchid',
-  'Caudex',
-  'Jungle Plants',
-  'Staghorn Fern',
-  'Bromeliad',
-  tr(l, '유묘 / 파종', 'Seedlings / Sowing', '実生 / 播種'),
-  tr(l, '선인장', 'Cactus', 'サボテン'),
-  'Tropical Plants',
-  'Tillandsia',
-];
+// ---------- categories = genera ----------
+// v0.1.1: a plant's genus is its My Plants category. Typing a new genus creates the category; a genus
+// category that no longer holds any plant is removed, so the genus suggestions stay tidy.
+const MIGRATION = 'v0.1.1';
+/** Turn "column … does not exist" from an old database into a clear message. */
+export function schemaHint(e: unknown) {
+  const m = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : String(e);
+  if (/schema cache|column .* does not exist|could not find the '.*' column/i.test(m))
+    return `데이터베이스 업데이트가 필요합니다. Supabase SQL Editor에서 supabase/${MIGRATION}.sql을 실행해 주세요. (Run supabase/${MIGRATION}.sql in the Supabase SQL Editor.)`;
+  return m;
+}
+const failSchema = (error: unknown) => {
+  if (error) throw new Error(schemaHint(error));
+};
 
-let seeding: Promise<void> | null = null;
-/** Create the 9 starter categories once per account (in the app language at that moment). */
-export function seedCategories(uid: string, locale: Locale, qc: QueryClient) {
-  if (seeding) return seeding;
-  seeding = (async () => {
-    const flag = `pm-cats-seeded-${uid}`;
-    if (await AsyncStorage.getItem(flag)) return;
-    const db = need();
-    const { count, error } = await db.from('plant_categories').select('id', { count: 'exact', head: true }).eq('owner_id', uid);
-    fail(error);
-    if (!count) {
-      const rows = DEFAULT_CATEGORIES(locale).map((name, i) => ({ owner_id: uid, name, sort_order: i * 10 }));
-      const ins = await db.from('plant_categories').insert(rows);
-      fail(ins.error);
-    }
-    await AsyncStorage.setItem(flag, '1');
-    await qc.invalidateQueries({ queryKey: ['categories'] });
-  })().finally(() => {
-    seeding = null;
-  });
-  return seeding;
+export const genusCategory = (cats: Category[], genus: string | null | undefined) =>
+  cats.find((c) => !c.parent_id && sameGenus(c.name, genus)) ?? null;
+
+/** The category for a genus: the existing one (any letter case) or a new one. */
+export async function ensureGenusCategory(uid: string, genus: string, cats: Category[]) {
+  const name = normalizeGenus(genus).slice(0, 40);
+  const found = genusCategory(cats, name);
+  if (found) return found.id;
+  const sort = cats.reduce((m, c) => Math.max(m, c.sort_order), 0) + 10;
+  const { data, error } = await need().from('plant_categories').insert({ owner_id: uid, name, parent_id: null, sort_order: sort }).select('id').single();
+  failSchema(error);
+  return (data as { id: string }).id;
 }
 
-export async function addCategory(uid: string, name: string, parentId: string | null, siblings: Category[]) {
-  const sort = siblings.reduce((m, c) => Math.max(m, c.sort_order), 0) + 10;
-  const { error } = await need().from('plant_categories').insert({ owner_id: uid, name: name.trim().slice(0, 40), parent_id: parentId, sort_order: sort });
-  fail(error);
+/**
+ * Rename a genus category and the genus of every plant in it (fixes a typo everywhere).
+ * Renaming to a genus that already has a category merges the two.
+ */
+export async function renameGenusCategory(cat: Category, newName: string, cats: Category[], plants: Plant[]) {
+  const db = need();
+  const name = normalizeGenus(newName).slice(0, 40);
+  if (!name) return;
+  const other = cats.find((c) => c.id !== cat.id && !c.parent_id && sameGenus(c.name, name));
+  if (!other) {
+    const { error } = await db.from('plant_categories').update({ name }).eq('id', cat.id);
+    failSchema(error);
+  }
+  const target = other ? other.id : cat.id;
+  for (const p of plants.filter((x) => x.category_id === cat.id)) {
+    const parts = { genus: name, species: p.species, cultivar: p.cultivar, seed: p.seed_parent_name, pollen: p.pollen_parent_name };
+    const res = await db.from('plants').update({ genus: name, category_id: target, scientific_name: composeName(parts) || p.scientific_name }).eq('id', p.id);
+    failSchema(res.error);
+  }
+  if (other) await db.from('plant_categories').delete().eq('id', cat.id);
 }
-export async function renameCategory(id: string, name: string) {
-  const { error } = await need().from('plant_categories').update({ name: name.trim().slice(0, 40) }).eq('id', id);
-  fail(error);
-}
-/** Sub-categories go too (ON DELETE CASCADE); plants inside become "unsorted" (SET NULL). */
-export async function deleteCategory(id: string) {
-  const { error } = await need().from('plant_categories').delete().eq('id', id);
-  fail(error);
+
+/** Remove genus categories that hold no plants any more. */
+export async function dropEmptyCategories(cats: Category[], plants: Plant[], keep: string[] = []) {
+  const used = new Set(plants.map((p) => p.category_id).filter(Boolean));
+  const empty = cats.filter((c) => !used.has(c.id) && !keep.includes(c.id) && !cats.some((x) => x.parent_id === c.id));
+  if (!empty.length) return;
+  const db = need();
+  for (const c of empty) await db.from('plant_categories').delete().eq('id', c.id);
 }
 
 // ---------- plants ----------
-export type PlantInput = Omit<Plant, 'owner_id' | 'created_at' | 'updated_at'>;
-export async function savePlant(uid: string, row: PlantInput, previous: Plant | null) {
+export type PlantInput = Omit<Plant, 'owner_id' | 'created_at' | 'updated_at' | 'category_id'>;
+/** Saves the plant into the category of its genus (created when new), then tidies empty categories. */
+export async function savePlant(uid: string, row: PlantInput, previous: Plant | null, cats: Category[], plants: Plant[]) {
   const db = need();
-  const payload = { ...row, owner_id: uid };
+  const category_id = row.genus ? await ensureGenusCategory(uid, row.genus, cats) : null;
+  const payload = { ...row, category_id, owner_id: uid };
   const { error } = previous ? await db.from('plants').update(payload).eq('id', row.id) : await db.from('plants').insert(payload);
-  fail(error);
+  failSchema(error);
   const dropped = (previous?.photo_paths ?? []).filter((p) => !row.photo_paths.includes(p));
   await removePhotos(USER_BUCKET, dropped);
+  const after = [...plants.filter((p) => p.id !== row.id), { ...(previous ?? ({} as Plant)), ...payload } as Plant];
+  await dropEmptyCategories(cats, after, category_id ? [category_id] : []).catch(() => {});
 }
-export async function deletePlant(p: Plant) {
+export async function deletePlant(p: Plant, cats: Category[], plants: Plant[]) {
   const { error } = await need().from('plants').delete().eq('id', p.id);
   fail(error);
   await removePhotos(USER_BUCKET, p.photo_paths);
+  await dropEmptyCategories(cats, plants.filter((x) => x.id !== p.id)).catch(() => {});
 }
 export async function setPlantPrivate(id: string, value: boolean) {
   const { error } = await need().from('plants').update({ is_private: value }).eq('id', id);
@@ -164,6 +178,10 @@ export async function setPlantPrivate(id: string, value: boolean) {
 export type FindInput = Omit<Find, 'owner_id' | 'created_at' | 'updated_at'>;
 export async function upsertFind(uid: string, row: FindInput) {
   const { error } = await need().from('finds').upsert({ ...row, owner_id: uid }, { onConflict: 'id' });
+  failSchema(error);
+}
+export async function setFindPrivate(id: string, value: boolean) {
+  const { error } = await need().from('finds').update({ is_private: value }).eq('id', id);
   fail(error);
 }
 export async function deleteFindOnline(f: Find) {

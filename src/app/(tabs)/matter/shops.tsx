@@ -44,6 +44,6 @@ export default function ShopsScreen() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingTop: 22, paddingBottom: 18, borderBottomWidth: 1.5, borderBottomColor: C.ink },
-  empty: { paddingVertical: 18, borderBottomWidth: 1.5, borderBottomColor: C.ink },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingTop: 22, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: C.hair },
+  empty: { paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: C.hair },
 });

@@ -48,7 +48,7 @@ export default function ProfileScreen() {
           <Txt size={12} color={C.sub} style={{ marginTop: 4 }}>{user?.email ?? ''}{admin ? ` · ${t('관리자', 'Admin', '管理者')}` : ''}</Txt>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 20 }}>
             <Stat n={plants.length} label={t('내 식물', 'My plants', 'マイ植物')} />
-            <Stat n={finds.length} label={t('야생 발견', 'Wild finds', '野外発見')} />
+            <Stat n={finds.length} label={t('관찰 기록', 'Observations', '観察記録')} />
             <Stat n={cats.length} label={t('분류', 'Categories', '分類')} />
           </View>
           <View style={{ marginTop: 20 }}>

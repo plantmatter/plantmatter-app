@@ -15,7 +15,7 @@ export default function AboutScreen() {
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <TopBar />
       <Page testID="about-screen">
-        <ScreenTitle sub={t('내가 키우는 식물과 야생에서 만난 식물을 기록하고, 식물 행사와 매장을 소개합니다.', 'Record the plants you keep and the plants you meet in the wild, and discover plant events and shops.', '育てている植物と野外で出会った植物を記録し、植物イベントやショップを紹介します。')}>PLANT MATTER</ScreenTitle>
+        <ScreenTitle sub={t('내가 키우는 식물과 관찰한 식물을 기록하고, 식물 행사와 매장을 소개합니다.', 'Record the plants you keep and the plants you observe, and discover plant events and shops.', '育てている植物と観察した植物を記録し、植物イベントやショップを紹介します。')}>PLANT MATTER</ScreenTitle>
         <Txt size={13} color={C.sub} testID="app-version">{`v${version} · BETA`}</Txt>
         <View style={{ marginTop: 24 }}>
           <BigRow title={t('이용약관', 'Terms', '利用規約')} onPress={() => router.push('/options/legal?doc=terms')} testID="about-terms" />

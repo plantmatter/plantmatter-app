@@ -1,4 +1,4 @@
--- PLANT MATTER app — database schema v0.1
+-- PLANT MATTER app — database schema (v0.1.1)
 -- Run once in a NEW Supabase project: SQL Editor → paste everything → Run. Safe to run again.
 --
 -- What it creates
@@ -6,8 +6,8 @@
 --   beta_invites      e-mail addresses allowed to use the beta (managed here, in the SQL Editor)
 --   app_admins        accounts that may post MATTER events and shops (managed here)
 --   plant_categories  "My Plants" categories, two levels
---   plants            kept plants (category, origin, seed / pollen parents, photos)
---   finds             plants found in the wild (country only — no coordinates)
+--   plants            kept plants (genus = category, species, cultivar, origin, seed / pollen parents, photos)
+--   finds             observations (genus / species, country or a whole region — no coordinates)
 --   matter_events     plant events (anyone can read, admins write)
 --   matter_shops      shops and showrooms (anyone can read, admins write)
 --   storage           user-photos (private, owner only) and matter-media (public posters, admins upload)
@@ -169,7 +169,7 @@ grant select, insert, update, delete on public.plants to authenticated;
 drop trigger if exists plants_touch on public.plants;
 create trigger plants_touch before update on public.plants for each row execute function private.touch_updated_at();
 
--- 3. WILD FINDS (country only) ----------------------------------------------------------------------
+-- 3. OBSERVATIONS (country or region only) ----------------------------------------------------------------------
 create table if not exists public.finds (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -291,6 +291,39 @@ create policy "Admins add matter media" on storage.objects for insert to authent
 create policy "Admins update matter media" on storage.objects for update to authenticated
   using (bucket_id = 'matter-media' and public.is_app_admin()) with check (bucket_id = 'matter-media' and public.is_app_admin());
 create policy "Admins remove matter media" on storage.objects for delete to authenticated using (bucket_id = 'matter-media' and public.is_app_admin());
+
+-- 6. v0.1.1 · PLANTS: NAME PARTS ----------------------------------------------------------------------------------------
+alter table public.plants add column if not exists genus text;
+alter table public.plants add column if not exists species text;
+alter table public.plants add column if not exists cultivar text;
+
+-- 7. v0.1.1 · OBSERVATIONS: NAME PARTS AND REGION ----------------------------------------------------------------------------------
+alter table public.finds add column if not exists genus text;
+alter table public.finds add column if not exists species text;
+alter table public.finds add column if not exists region text;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'plants_name_parts') then
+    alter table public.plants add constraint plants_name_parts check (
+      (genus is null or char_length(btrim(genus)) between 1 and 60)
+      and (species is null or char_length(species) <= 100)
+      and (cultivar is null or char_length(cultivar) <= 100));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'finds_name_and_region') then
+    alter table public.finds add constraint finds_name_and_region check (
+      (genus is null or char_length(btrim(genus)) between 1 and 60)
+      and (species is null or char_length(species) <= 100)
+      and (region is null or region ~ '^[a-z_]{2,30}$'));
+  end if;
+end $$;
+
+-- 8. v0.1.1 · ONE CATEGORY PER GENUS ----------------------------------------------------------------------------
+do $$ begin
+  create unique index if not exists plant_categories_one_per_genus
+    on public.plant_categories (owner_id, lower(name)) where parent_id is null;
+exception when unique_violation then
+  raise notice 'Two categories of one account share a name. Rename one in the app (that merges them), then run this file again.';
+end $$;
 
 notify pgrst, 'reload schema';
 

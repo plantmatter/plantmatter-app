@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { REGIONS } from '@/data/geo';
-import { choiceKey, choiceLabel, choicesIn, countryLabel, originLabel, regionName, searchPlaces, type PickerMode, type PlaceChoice } from '@/lib/geo';
+import { choiceKey, choiceLabel, choicesIn, countryLabel, findPlaceLabel, originLabel, regionName, searchPlaces, type PickerMode, type PlaceChoice } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { C } from '@/lib/theme';
 
@@ -30,12 +30,12 @@ export function PlacePicker({ mode, value, onChange, label, testID }: { mode: Pi
     AsyncStorage.getItem(RECENT_KEY)
       .then((raw) => {
         const list = raw ? (JSON.parse(raw) as PlaceChoice[]) : [];
-        setRecent(list.filter((c) => mode === 'origin' || c.kind === 'country').slice(0, 6));
+        setRecent(list.filter((c) => (mode === 'origin' ? true : mode === 'find' ? c.kind !== 'area' : c.kind === 'country')).slice(0, 6));
       })
       .catch(() => setRecent([]));
   }, [open, mode]);
 
-  const shown = mode === 'country' ? countryLabel(value.place, locale) : originLabel(value.region, value.place, locale);
+  const shown = mode === 'country' ? countryLabel(value.place, locale) : mode === 'find' ? findPlaceLabel(value.region, value.place, locale) : originLabel(value.region, value.place, locale);
   const results = useMemo(() => searchPlaces(query, mode), [query, mode]);
 
   const choose = (c: PlaceChoice | null) => {
@@ -78,14 +78,16 @@ export function PlacePicker({ mode, value, onChange, label, testID }: { mode: Pi
         hint={
           mode === 'country'
             ? t('정확한 장소 대신 나라까지만 기록합니다.', 'Only the country is recorded, never the exact spot.', '正確な場所ではなく国だけを記録します。')
-            : t('넓은 지역만 골라도 됩니다.', 'A broad region alone is fine.', '広い地域だけでも構いません。')
+            : mode === 'find'
+              ? t('나라 또는 넓은 지역까지만 기록합니다. 정확한 장소는 남기지 않습니다.', 'Only the country or a broad region is recorded, never the exact spot.', '国または広い地域までを記録します。正確な場所は残しません。')
+              : t('넓은 지역만 골라도 됩니다.', 'A broad region alone is fine.', '広い地域だけでも構いません。')
         }
       />
       <Sheet visible={open} title={label} onClose={() => setOpen(false)} testID={`${testID}-sheet`}>
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder={mode === 'country' ? t('나라 이름 검색 (예: 말레이, Japan)', 'Search a country (e.g. Malay, Japan)', '国名で検索（例：マレー、Japan）') : t('지역·섬·나라 검색 (예: Borneo)', 'Search region, island, country (e.g. Borneo)', '地域・島・国で検索（例：Borneo）')}
+          placeholder={mode === 'country' ? t('나라 이름 검색 (예: 말레이, Japan)', 'Search a country (e.g. Malay, Japan)', '国名で検索（例：マレー、Japan）') : mode === 'find' ? t('지역·나라 검색 (예: 동남아, Japan)', 'Search a region or country (e.g. Southeast, Japan)', '地域・国で検索（例：東南、Japan）') : t('지역·섬·나라 검색 (예: Borneo)', 'Search region, island, country (e.g. Borneo)', '地域・島・国で検索（例：Borneo）')}
           placeholderTextColor="#A8A8A8"
           style={[styles.search, fontFor(query || 'a')]}
           autoCorrect={false}

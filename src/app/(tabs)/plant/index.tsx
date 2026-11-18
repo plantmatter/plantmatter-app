@@ -21,8 +21,8 @@ export default function PlantHome() {
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <TopBar left="none" />
       <Page testID="plant-screen">
-        <BigRow title="My Plants" count={counts ? plants?.length ?? 0 : null} sub={t('내 식물 · 분류별 관리', 'MY COLLECTION BY CATEGORY', 'マイ植物・分類別')} onPress={() => router.push('/plant/mine')} testID="plant-mine" />
-        <BigRow title="Wild Finds" count={counts ? (finds?.length ?? 0) + pendingNew : null} sub={t('야생에서 발견한 식물 · 나라 단위', 'PLANTS FOUND IN THE WILD · BY COUNTRY', '野外で見つけた植物・国単位')} onPress={() => router.push('/plant/wild')} testID="plant-wild" />
+        <BigRow title="My Plants" count={counts ? plants?.length ?? 0 : null} sub={t('나의 식물 살펴보기', 'BROWSE MY PLANTS', 'わたしの植物を見る')} onPress={() => router.push('/plant/mine')} testID="plant-mine" />
+        <BigRow title="My Observations" count={counts ? (finds?.length ?? 0) + pendingNew : null} sub={t('나의 관찰 식물 모아보기', 'ALL MY PLANT OBSERVATIONS', '観察した植物をまとめて見る')} onPress={() => router.push('/plant/wild')} testID="plant-wild" />
       </Page>
     </View>
   );

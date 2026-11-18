@@ -7,14 +7,15 @@ import { MemberGate } from '@/components/gate';
 import { PhotoPager } from '@/components/photos';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
-import { Button, InfoRow, Loading, Notice, Page } from '@/components/ui';
+import { Button, InfoRow, Loading, Notice, Page, VisibilityField } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { deleteFindOnline, useFinds } from '@/lib/data';
+import { deleteFindOnline, setFindPrivate, useFinds } from '@/lib/data';
 import { confirmAsync, notify } from '@/lib/dialogs';
 import { dayLabel } from '@/lib/format';
-import { countryLabel } from '@/lib/geo';
+import { findPlaceLabel } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { idStatusLabel } from '@/lib/labels';
+import { displayName } from '@/lib/names';
 import { discardQueued, queuedAsFind, useOutbox } from '@/lib/outbox';
 import { useSignedUrls } from '@/lib/photos';
 import { errorText } from '@/lib/supabase';
@@ -35,7 +36,7 @@ export default function FindDetailScreen() {
         }
       />
       <Page testID="find-detail">
-        <MemberGate what={t('야생 발견 기록', 'Wild Finds', '野外発見の記録')}>
+        <MemberGate what={t('관찰 기록', 'My Observations', '観察記録')}>
           <FindDetail id={id} />
         </MemberGate>
       </Page>
@@ -56,9 +57,17 @@ function FindDetail({ id }: { id: string }) {
   if (findsQ.isLoading) return <Loading />;
   if (!f) return <Notice>{t('이 기록을 찾을 수 없습니다. 삭제되었을 수 있습니다.', 'This find could not be found. It may have been deleted.', 'この記録が見つかりません。削除された可能性があります。')}</Notice>;
 
+  const togglePrivate = async (v: boolean) => {
+    try {
+      await setFindPrivate(f.id, v);
+      await qc.invalidateQueries({ queryKey: ['finds'] });
+    } catch (e) {
+      notify(t('저장하지 못했습니다', 'Could not save', '保存できませんでした'), errorText(e));
+    }
+  };
   const remove = async () => {
     if (!user) return;
-    const ok = await confirmAsync(t('이 발견 기록을 삭제할까요?', 'Delete this find?', 'この記録を削除しますか？'), '', t('삭제', 'Delete', '削除'), t('취소', 'Cancel', 'キャンセル'), true);
+    const ok = await confirmAsync(t('이 관찰 기록을 삭제할까요?', 'Delete this observation?', 'この観察記録を削除しますか？'), '', t('삭제', 'Delete', '削除'), t('취소', 'Cancel', 'キャンセル'), true);
     if (!ok) return;
     setBusy(true);
     try {
@@ -76,7 +85,7 @@ function FindDetail({ id }: { id: string }) {
   return (
     <View>
       <Txt size={10} color={C.muted} style={{ letterSpacing: 1.2, marginBottom: 10 }}>
-        WILD FIND
+        OBSERVATION
       </Txt>
       {pending && (
         <Notice tone="warning" testID="find-pending">
@@ -87,21 +96,27 @@ function FindDetail({ id }: { id: string }) {
       )}
       <PhotoPager uris={f.photo_paths.map((x) => resolve(x))} testID="find-photos-view" />
       <Txt italic size={26} style={{ lineHeight: 32 }} testID="find-title">
-        {f.scientific_name}
+        {displayName(f.scientific_name, locale)}
       </Txt>
       <View style={{ marginTop: 18 }}>
-        <InfoRow label={t('발견한 나라', 'Country', '発見した国')} value={countryLabel(f.country_code, locale) || t('지정 안 함', 'Not set', '未設定')} testID="find-info-country" />
-        <InfoRow label={t('발견한 날짜', 'Date', '発見日')} value={dayLabel(f.observed_on, locale)} testID="find-info-date" />
+        <InfoRow label={t('관찰한 곳', 'Place', '観察した場所')} value={findPlaceLabel(f.region, f.country_code, locale) || t('지정 안 함', 'Not set', '未設定')} testID="find-info-country" />
+        <InfoRow label={t('관찰한 날짜', 'Date', '観察日')} value={dayLabel(f.observed_on, locale)} testID="find-info-date" />
         <InfoRow label={t('동정', 'ID', '同定')} value={idStatusLabel(f.identification_status, locale)} />
         <InfoRow label={t('서식 환경', 'Habitat', '生育環境')} value={f.habitat} />
-        <InfoRow label={t('공개', 'Visibility', '公開')} value={f.is_private ? t('나만 보기', 'Only me', '自分だけ') : t('기본', 'Default', '標準')} />
       </View>
       {!!f.notes && (
         <Txt size={13} color="#333" style={{ marginTop: 18, lineHeight: 21 }}>
           {f.notes}
         </Txt>
       )}
-      <Button kind="danger" label={t('삭제', 'Delete', '削除')} onPress={remove} busy={busy} style={{ marginTop: 28 }} testID="find-delete" />
+      <View style={{ marginTop: 24 }}>
+        {pending ? (
+          <InfoRow label={t('공개 설정', 'Visibility', '公開設定')} value={f.is_private ? t('비공개', 'Private', '非公開') : t('공개', 'Public', '公開')} />
+        ) : (
+          <VisibilityField label={t('공개 설정', 'Visibility', '公開設定')} isPrivate={f.is_private} onChange={togglePrivate} testID="find-visibility-detail" />
+        )}
+      </View>
+      <Button kind="danger" label={t('삭제', 'Delete', '削除')} onPress={remove} busy={busy} style={{ marginTop: 12 }} testID="find-delete" />
     </View>
   );
 }

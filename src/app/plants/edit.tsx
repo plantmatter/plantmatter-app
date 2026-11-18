@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { randomUUID } from 'expo-crypto';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MemberGate } from '@/components/gate';
 import { PhotoField } from '@/components/photos';
@@ -10,13 +10,14 @@ import { PlacePicker, type PlaceValue } from '@/components/place-picker';
 import { usePrompt } from '@/components/prompt';
 import { Sheet, SheetItem } from '@/components/sheet';
 import { TopBar } from '@/components/top-bar';
-import { Button, Field, Loading, Page, ScreenTitle, SectionHead, Segmented, SelectBox, ToggleRow } from '@/components/ui';
+import { Txt } from '@/components/txt';
+import { Button, Field, Loading, Page, ScreenTitle, SectionHead, Segmented, SelectBox, VisibilityField } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
-import { categoryPath, savePlant, subCategories, topCategories, useCategories, usePlants } from '@/lib/data';
+import { categoryPath, savePlant, topCategories, useCategories, usePlants, type PlantInput } from '@/lib/data';
 import { notify } from '@/lib/dialogs';
-import { crossName } from '@/lib/format';
 import { useLocale } from '@/lib/i18n';
 import { ID_STATUSES, idStatusLabel } from '@/lib/labels';
+import { cleanCultivar, composeName, normalizeGenus, parseName } from '@/lib/names';
 import { storeFormPhotos, useSignedUrls, userFolder, type FormPhoto } from '@/lib/photos';
 import { errorText, USER_BUCKET } from '@/lib/supabase';
 import { C } from '@/lib/theme';
@@ -42,7 +43,7 @@ export default function PlantEditScreen() {
 }
 
 function PlantForm() {
-  const params = useLocalSearchParams<{ id?: string; categoryId?: string }>();
+  const params = useLocalSearchParams<{ id?: string; genus?: string }>();
   const plantsQ = usePlants();
   const catsQ = useCategories();
   if (plantsQ.isLoading || catsQ.isLoading) return <Loading />;
@@ -50,67 +51,66 @@ function PlantForm() {
   const cats = catsQ.data ?? [];
   const existing = params.id ? plants.find((p) => p.id === params.id) ?? null : null;
   if (params.id && !existing) return <Loading />;
-  const preset = params.categoryId && cats.some((c) => c.id === params.categoryId) ? params.categoryId : null;
-  return <PlantFormBody key={existing?.id ?? 'new'} existing={existing} plants={plants} cats={cats} presetCategory={preset} />;
+  return <PlantFormBody key={existing?.id ?? 'new'} existing={existing} plants={plants} cats={cats} presetGenus={params.genus ?? ''} />;
 }
 
 /** Starts from the stored plant (edit) or empty (new); state is set once, when the form mounts. */
-function PlantFormBody({ existing, plants, cats, presetCategory }: { existing: Plant | null; plants: Plant[]; cats: Category[]; presetCategory: string | null }) {
+function PlantFormBody({ existing, plants, cats, presetGenus }: { existing: Plant | null; plants: Plant[]; cats: Category[]; presetGenus: string }) {
   const { t, locale } = useLocale();
   const { user } = useAuth();
   const qc = useQueryClient();
   const prompt = usePrompt();
+  // Plants saved before v0.1.1 have one free-text name: split it into its parts once.
+  const initial = existing ? (existing.genus ? { genus: existing.genus, species: existing.species ?? '', cultivar: existing.cultivar ?? '' } : parseName(existing.scientific_name)) : { genus: presetGenus, species: '', cultivar: '' };
   const [photos, setPhotos] = useState<FormPhoto[]>(() => (existing?.photo_paths ?? []).map((path) => ({ key: path, path })));
-  const [name, setName] = useState(existing?.scientific_name ?? '');
-  // The name follows "seed × pollen" until the user types a different one.
-  const [nameAuto, setNameAuto] = useState(!existing || existing.scientific_name === crossName(existing.seed_parent_name, existing.pollen_parent_name));
-  const [nickname, setNickname] = useState(existing?.nickname ?? '');
-  const [categoryId, setCategoryId] = useState<string | null>(existing ? existing.category_id : presetCategory);
-  const [status, setStatus] = useState<IdStatus>(existing?.identification_status ?? 'unidentified');
+  const [genus, setGenus] = useState(initial.genus);
+  const [species, setSpecies] = useState(initial.species);
+  const [cultivar, setCultivar] = useState(initial.cultivar);
   const [origin, setOrigin] = useState<PlaceValue>({ region: existing?.origin_region ?? null, place: existing?.origin_place ?? null });
   const [seed, setSeed] = useState<Parent>(existing ? { id: existing.seed_parent_id, name: existing.seed_parent_name ?? '' } : NO_PARENT);
   const [pollen, setPollen] = useState<Parent>(existing ? { id: existing.pollen_parent_id, name: existing.pollen_parent_name ?? '' } : NO_PARENT);
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [isPrivate, setIsPrivate] = useState(existing?.is_private ?? false);
-  const [sheet, setSheet] = useState<'category' | 'seed' | 'pollen' | null>(null);
+  const [nickname, setNickname] = useState(existing?.nickname ?? '');
+  const [status, setStatus] = useState<IdStatus>(existing?.identification_status ?? 'unidentified');
+  const [sheet, setSheet] = useState<'seed' | 'pollen' | null>(null);
   const [busy, setBusy] = useState(false);
-
   const resolve = useSignedUrls(photos.map((p) => p.path));
 
-  const parentChoices = plants.filter((p) => p.id !== existing?.id);
-  const parentLabel = (p: Parent) => p.name || '';
+  const name = composeName({ genus, species, cultivar, seed: seed.name, pollen: pollen.name });
+  const typed = genus.trim().toLowerCase();
+  const genusChoices = topCategories(cats)
+    .map((c) => c.name)
+    .filter((g) => !typed || (g.toLowerCase().startsWith(typed) && g.toLowerCase() !== typed))
+    .slice(0, 12);
+
   const pickParent = async (role: 'seed' | 'pollen', choice: Parent | 'custom') => {
     setSheet(null);
     let value: Parent;
     if (choice === 'custom') {
-      const typed = await prompt({ title: role === 'seed' ? t('모본 이름', 'Seed parent', '母本の名前') : t('부본 이름', 'Pollen parent', '父本の名前'), placeholder: 'Bulbophyllum …', maxLength: 160, initial: (role === 'seed' ? seed : pollen).id ? '' : (role === 'seed' ? seed : pollen).name });
-      if (!typed) return;
-      value = { id: null, name: typed };
+      const current = role === 'seed' ? seed : pollen;
+      const typedName = await prompt({ title: role === 'seed' ? t('모본 이름', 'Seed parent', '母本の名前') : t('부본 이름', 'Pollen parent', '父本の名前'), placeholder: 'Bulbophyllum …', maxLength: 160, initial: current.id ? '' : current.name });
+      if (!typedName) return;
+      value = { id: null, name: typedName };
     } else value = choice;
-    const nextSeed = role === 'seed' ? value : seed;
-    const nextPollen = role === 'pollen' ? value : pollen;
     if (role === 'seed') setSeed(value);
     else setPollen(value);
-    const auto = crossName(nextSeed.name, nextPollen.name);
-    if (auto && nameAuto) setName(auto);
-  };
-  const onName = (v: string) => {
-    setName(v);
-    setNameAuto(!v.trim() || v === crossName(seed.name, pollen.name));
   };
 
   const save = async () => {
     if (!user) return;
-    const cleanName = name.trim();
-    if (!cleanName) return notify(t('이름을 입력해 주세요', 'Enter a name', '名前を入力してください'));
+    const g = normalizeGenus(genus);
+    if (!g) return notify(t('속을 입력해 주세요', 'Enter the genus', '属を入力してください'), t('예: Bulbophyllum. 입력한 속이 My Plants의 분류가 됩니다.', 'e.g. Bulbophyllum. The genus becomes the My Plants category.', '例：Bulbophyllum。入力した属がMy Plantsの分類になります。'));
     setBusy(true);
     try {
       const id = existing?.id ?? randomUUID();
       const photo_paths = await storeFormPhotos(USER_BUCKET, userFolder(user.id, 'plants', id), photos);
-      const row: Omit<Plant, 'owner_id' | 'created_at' | 'updated_at'> = {
+      const row: PlantInput = {
         id,
-        category_id: categoryId,
-        scientific_name: cleanName.slice(0, 160),
+        scientific_name: composeName({ genus: g, species, cultivar, seed: seed.name, pollen: pollen.name }) || g,
+        genus: g,
+        species: species.trim().slice(0, 100) || null,
+        cultivar: cleanCultivar(cultivar) || null,
         nickname: nickname.trim().slice(0, 80),
         identification_status: status,
         origin_region: origin.region,
@@ -123,8 +123,8 @@ function PlantFormBody({ existing, plants, cats, presetCategory }: { existing: P
         photo_paths,
         is_private: isPrivate,
       };
-      await savePlant(user.id, row, existing);
-      await qc.invalidateQueries({ queryKey: ['plants'] });
+      await savePlant(user.id, row, existing, cats, plants);
+      await Promise.all([qc.invalidateQueries({ queryKey: ['plants'] }), qc.invalidateQueries({ queryKey: ['categories'] })]);
       if (existing) router.back();
       else router.replace(`/plants/${id}`);
     } catch (e) {
@@ -137,63 +137,91 @@ function PlantFormBody({ existing, plants, cats, presetCategory }: { existing: P
   return (
     <View>
       <PhotoField label={t('사진', 'Photos', '写真')} photos={photos} onChange={setPhotos} max={PLANT_PHOTO_LIMIT} resolve={resolve} testID="plant-photos" />
-      <SelectBox label={t('분류', 'Category', '分類')} value={categoryId ? categoryPath(cats, categoryId) : ''} placeholder={t('미분류', 'Unsorted', '未分類')} onPress={() => setSheet('category')} testID="plant-category" />
 
-      <SectionHead>{t('모본 × 부본', 'SEED × POLLEN PARENT', '母本 × 父本')}</SectionHead>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={{ flex: 1 }}>
-          <SelectBox label={t('모본 (♀)', 'Seed (♀)', '母本 (♀)')} value={parentLabel(seed)} placeholder={t('없음', 'None', 'なし')} onPress={() => setSheet('seed')} testID="plant-seed" />
+      <SectionHead>{t('학명', 'SCIENTIFIC NAME', '学名')}</SectionHead>
+      <Field
+        label={t('속 (Genus)', 'Genus', '属 (Genus)')}
+        required
+        value={genus}
+        onChangeText={setGenus}
+        placeholder="Bulbophyllum"
+        autoCapitalize="words"
+        autoCorrect={false}
+        maxLength={60}
+        hint={t('입력한 속이 My Plants의 분류가 됩니다. 아래 버튼으로 전에 쓴 속을 고를 수 있습니다.', 'The genus becomes the My Plants category. Tap a button below to reuse one.', '入力した属がMy Plantsの分類になります。下のボタンで以前の属を選べます。')}
+        testID="plant-genus"
+      />
+      {!!genusChoices.length && (
+        <View style={styles.chips} testID="genus-choices">
+          {genusChoices.map((g) => (
+            <Pressable key={g} onPress={() => setGenus(g)} style={styles.chip} accessibilityRole="button" testID={`genus-choice-${g}`}>
+              <Txt italic size={13}>
+                {g}
+              </Txt>
+            </Pressable>
+          ))}
         </View>
-        <View style={{ flex: 1 }}>
-          <SelectBox label={t('부본 (♂)', 'Pollen (♂)', '父本 (♂)')} value={parentLabel(pollen)} placeholder={t('없음', 'None', 'なし')} onPress={() => setSheet('pollen')} testID="plant-pollen" />
-        </View>
+      )}
+      <Field label={t('종소명 (선택)', 'Species (optional)', '種小名（任意）')} value={species} onChangeText={setSpecies} placeholder={t('예: echinolabium · 모르면 비워 두세요', 'e.g. echinolabium · leave empty if unknown', '例：echinolabium・不明なら空欄')} autoCapitalize="none" autoCorrect={false} maxLength={100} testID="plant-species" />
+      <Field label={t('품종·교배명 (선택)', 'Cultivar / grex (optional)', '品種・交配名（任意）')} value={cultivar} onChangeText={setCultivar} placeholder="Red Dragon" autoCorrect={false} maxLength={100} testID="plant-cultivar" />
+      <View style={styles.preview} testID="plant-name-preview">
+        <Txt size={11} color={C.muted}>
+          {t('저장될 이름', 'Saved as', '保存される名前')}
+        </Txt>
+        <Txt italic size={16} style={{ marginTop: 4 }}>
+          {name || '—'}
+        </Txt>
       </View>
 
-      <Field
-        label={t('이름 / 학명', 'Name / scientific name', '名前 / 学名')}
-        required
-        value={name}
-        onChangeText={onName}
-        placeholder="Begonia sp."
-        maxLength={160}
-        autoCapitalize="sentences"
-        hint={t('모본과 부본을 모두 고르면 "모본 × 부본"이 자동으로 들어갑니다. 직접 고친 이름은 바뀌지 않습니다.', 'Choosing both parents fills in "seed × pollen". A name you typed yourself is never replaced.', '母本と父本を選ぶと「母本 × 父本」が自動で入ります。手で直した名前は変わりません。')}
-        testID="plant-name"
-      />
-      <Field label={t('별칭 (선택)', 'Nickname (optional)', 'ニックネーム（任意）')} value={nickname} onChangeText={setNickname} maxLength={80} testID="plant-nickname" />
-      <Segmented value={status} onChange={setStatus} options={ID_STATUSES.map((s) => ({ value: s, label: idStatusLabel(s, locale) }))} testID="plant-status" />
+      <SectionHead>{t('원산지', 'ORIGIN', '原産地')}</SectionHead>
       <PlacePicker mode="origin" label={t('원산지', 'Origin', '原産地')} value={origin} onChange={setOrigin} testID="plant-origin" />
-      <Field label={t('메모', 'Notes', 'メモ')} value={notes} onChangeText={setNotes} multiline maxLength={2000} testID="plant-notes" />
-      <ToggleRow label={t('나만 보기', 'Only me', '自分だけ')} sub={t('친구 기능이 생기면 이 식물은 다른 사람에게 보이지 않습니다. (이번 버전은 모든 기록이 나만 보입니다)', 'When sharing arrives, this plant stays hidden from others. (In this version all records are private.)', '共有機能が追加されても、この植物は他の人に表示されません。（このバージョンではすべて自分だけ）')} value={isPrivate} onChange={setIsPrivate} testID="plant-private" />
-      <Button label={t('저장', 'SAVE', '保存')} onPress={save} busy={busy} testID="plant-save" />
 
-      <Sheet visible={sheet === 'category'} title={t('분류', 'Category', '分類')} onClose={() => setSheet(null)} testID="category-sheet">
-        <SheetItem label={t('미분류', 'Unsorted', '未分類')} selected={!categoryId} onPress={() => { setCategoryId(null); setSheet(null); }} testID="category-none" />
-        {topCategories(cats).map((c) => (
-          <View key={c.id}>
-            <SheetItem label={c.name} strong selected={categoryId === c.id} onPress={() => { setCategoryId(c.id); setSheet(null); }} testID={`category-${c.name}`} />
-            {subCategories(cats, c.id).map((s) => (
-              <SheetItem key={s.id} label={s.name} indent={1} selected={categoryId === s.id} onPress={() => { setCategoryId(s.id); setSheet(null); }} testID={`category-${s.name}`} />
-            ))}
-          </View>
-        ))}
-      </Sheet>
+      <SectionHead>{t('모본 × 부본 (선택)', 'SEED × POLLEN PARENT (OPTIONAL)', '母本 × 父本（任意）')}</SectionHead>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flex: 1 }}>
+          <SelectBox label={t('모본 (♀)', 'Seed (♀)', '母本 (♀)')} value={seed.name} placeholder={t('없음', 'None', 'なし')} onPress={() => setSheet('seed')} testID="plant-seed" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <SelectBox label={t('부본 (♂)', 'Pollen (♂)', '父本 (♂)')} value={pollen.name} placeholder={t('없음', 'None', 'なし')} onPress={() => setSheet('pollen')} testID="plant-pollen" />
+        </View>
+      </View>
+      <Txt size={10} color={C.muted} style={{ marginTop: -6, marginBottom: 14, lineHeight: 15 }}>
+        {t('모본: 씨를 맺은 쪽 · 부본: 꽃가루를 준 쪽. 비워 둬도 됩니다. 둘 다 고르고 종소명을 비우면 이름이 "모본 × 부본"이 됩니다.', 'Seed parent bears the seed, pollen parent gives the pollen. Both are optional. With both set and no species, the name becomes "seed × pollen".', '母本：種子をつけた側・父本：花粉を与えた側。空欄でも構いません。両方を選び種小名が空なら「母本 × 父本」になります。')}
+      </Txt>
+
+      <Field label={t('메모', 'Notes', 'メモ')} value={notes} onChangeText={setNotes} multiline maxLength={2000} testID="plant-notes" />
+      <VisibilityField label={t('공개 설정', 'Visibility', '公開設定')} isPrivate={isPrivate} onChange={setIsPrivate} testID="plant-visibility" />
+
+      <SectionHead>{t('선택 항목', 'OPTIONAL', '任意項目')}</SectionHead>
+      <Field label={t('별칭', 'Nickname', 'ニックネーム')} value={nickname} onChangeText={setNickname} maxLength={80} testID="plant-nickname" />
+      <Segmented value={status} onChange={setStatus} options={ID_STATUSES.map((s) => ({ value: s, label: idStatusLabel(s, locale) }))} testID="plant-status" />
+
+      <Button label={t('저장', 'SAVE', '保存')} onPress={save} busy={busy} style={{ marginTop: 8 }} testID="plant-save" />
+
       {(['seed', 'pollen'] as const).map((role) => (
         <Sheet key={role} visible={sheet === role} title={role === 'seed' ? t('모본 (♀)', 'Seed parent (♀)', '母本 (♀)') : t('부본 (♂)', 'Pollen parent (♂)', '父本 (♂)')} onClose={() => setSheet(null)} testID={`${role}-sheet`}>
           <SheetItem label={t('없음', 'None', 'なし')} selected={!(role === 'seed' ? seed : pollen).name} onPress={() => pickParent(role, NO_PARENT)} testID={`${role}-none`} />
           <SheetItem label={t('직접 입력…', 'Type a name…', '直接入力…')} onPress={() => pickParent(role, 'custom')} testID={`${role}-custom`} />
-          {parentChoices.map((p) => (
-            <SheetItem
-              key={p.id}
-              label={p.scientific_name}
-              sub={categoryPath(cats, p.category_id) || undefined}
-              selected={(role === 'seed' ? seed : pollen).id === p.id}
-              onPress={() => pickParent(role, { id: p.id, name: p.scientific_name })}
-              testID={`${role}-pick-${p.id}`}
-            />
-          ))}
+          {plants
+            .filter((p) => p.id !== existing?.id)
+            .map((p) => (
+              <SheetItem
+                key={p.id}
+                label={p.scientific_name}
+                sub={categoryPath(cats, p.category_id) || undefined}
+                selected={(role === 'seed' ? seed : pollen).id === p.id}
+                onPress={() => pickParent(role, { id: p.id, name: p.scientific_name })}
+                testID={`${role}-pick-${p.id}`}
+              />
+            ))}
         </Sheet>
       ))}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -6, marginBottom: 16 },
+  chip: { borderWidth: 1, borderColor: '#C9C9C9', backgroundColor: C.white, paddingHorizontal: 10, paddingVertical: 6 },
+  preview: { backgroundColor: C.white, padding: 12, borderWidth: 1, borderColor: '#E5E5E5', marginBottom: 6 },
+});

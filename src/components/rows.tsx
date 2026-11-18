@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { C } from '@/lib/theme';
 
-import { ChevronRight } from './icons';
+import { ChevronRight, Plus } from './icons';
 import { Txt } from './txt';
 
 /** Plant / find row with a square thumbnail, italic name and a small meta line. */
@@ -55,27 +55,31 @@ export function Nest({ children, light }: { children: ReactNode; light?: boolean
   return <View style={[styles.nest, light && styles.nestLight]}>{children}</View>;
 }
 
-export function ActionChips({ actions }: { actions: { label: string; onPress: () => void; primary?: boolean; testID?: string }[] }) {
-  return (
-    <View style={styles.chips}>
-      {actions.map((a) => (
-        <Pressable key={a.label} onPress={a.onPress} style={[styles.chip, a.primary && styles.chipPrimary]} accessibilityRole="button" testID={a.testID}>
-          <Txt size={11} color={a.primary ? C.white : C.ink}>
-            {a.label}
-          </Txt>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#E1E1E1' },
   thumb: { width: 48, height: 48, backgroundColor: '#E9E9E9', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   badge: { backgroundColor: '#6B6B6B', paddingHorizontal: 5, paddingVertical: 1 },
-  nest: { marginLeft: 2, marginTop: 4, marginBottom: 14, paddingLeft: 14, borderLeftWidth: 2, borderLeftColor: C.ink },
-  nestLight: { borderLeftWidth: 1, borderLeftColor: '#BDBDBD', marginBottom: 8, paddingLeft: 12 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8, marginBottom: 6 },
-  chip: { borderWidth: 1, borderColor: '#C9C9C9', backgroundColor: C.white, paddingHorizontal: 10, minHeight: 32, justifyContent: 'center' },
-  chipPrimary: { backgroundColor: C.ink, borderColor: C.ink },
+  nest: { marginLeft: 2, marginTop: 4, marginBottom: 14, paddingLeft: 14, borderLeftWidth: 1, borderLeftColor: C.hair },
+  nestLight: { borderLeftWidth: 1, borderLeftColor: C.hair, marginBottom: 8, paddingLeft: 12 },
 });
+
+/** A plain ＋ button (adds a plant). */
+export function PlusButton({ onPress, label, size = 44, testID }: { onPress: () => void; label: string; size?: number; testID?: string }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={6} testID={testID}
+      style={({ pressed }) => [{ width: size, height: size, borderRadius: size / 2, borderWidth: 1, borderColor: '#BDBDBD', backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}>
+      <Plus size={size * 0.42} weight={1.6} />
+    </Pressable>
+  );
+}
+
+/** Small underlined text action ("이름 변경"). */
+export function TextAction({ label, onPress, testID }: { label: string; onPress: () => void; testID?: string }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={8} accessibilityRole="button" testID={testID}>
+      <Txt size={12} color={C.sub} style={{ textDecorationLine: 'underline' }}>
+        {label}
+      </Txt>
+    </Pressable>
+  );
+}

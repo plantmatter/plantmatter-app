@@ -28,19 +28,24 @@ export function countryLabel(code: string | null | undefined, locale: Locale) {
   const r = regionName(regionOf(code), locale);
   return r ? `${placeName(code, locale)} · ${r}` : placeName(code, locale);
 }
+/** Where an observation was made: a country, or a whole region ("동남아시아 (지역 전체)"). */
+export function findPlaceLabel(region: string | null | undefined, country: string | null | undefined, locale: Locale) {
+  if (country) return countryLabel(country, locale);
+  const r = regionName(region, locale);
+  return r ? `${r} (${({ ko: '지역 전체', en: 'whole region', ja: '地域全体' } as const)[locale]})` : '';
+}
 
 export type PlaceChoice = { kind: 'region' | 'area' | 'country'; region: string; place: string | null };
-export type PickerMode = 'origin' | 'country';
+/** origin: region / island / country (kept plants) · find: region or country (observations) · country: country only */
+export type PickerMode = 'origin' | 'find' | 'country';
 
 /** Choices listed under a region. Origin mode also offers "whole region" and islands. */
 export function choicesIn(region: string, mode: PickerMode): PlaceChoice[] {
   const r = REGIONS.find((x) => x.id === region);
   if (!r) return [];
   const out: PlaceChoice[] = [];
-  if (mode === 'origin') {
-    out.push({ kind: 'region', region, place: null });
-    for (const a of AREAS) if (a.region === region) out.push({ kind: 'area', region, place: a.id });
-  }
+  if (mode !== 'country') out.push({ kind: 'region', region, place: null });
+  if (mode === 'origin') for (const a of AREAS) if (a.region === region) out.push({ kind: 'area', region, place: a.id });
   for (const c of r.countries) out.push({ kind: 'country', region, place: c });
   return out;
 }
@@ -53,10 +58,10 @@ export function searchPlaces(query: string, mode: PickerMode, limit = 30): Place
   const hit = (names: string[]) => names.some((n) => norm(n).includes(q));
   const starts = (names: string[]) => names.some((n) => norm(n).startsWith(q));
   const scored: { c: PlaceChoice; score: number }[] = [];
-  if (mode === 'origin') {
+  if (mode !== 'country')
     for (const r of REGIONS) if (hit([r.en, r.ko, r.ja])) scored.push({ c: { kind: 'region', region: r.id, place: null }, score: starts([r.en, r.ko, r.ja]) ? 0 : 2 });
+  if (mode === 'origin')
     for (const a of AREAS) if (hit([a.en, a.ko, a.ja, ...a.aliases])) scored.push({ c: { kind: 'area', region: a.region, place: a.id }, score: starts([a.en, a.ko, a.ja]) ? 0 : 2 });
-  }
   for (const c of COUNTRIES) {
     const names = [c.en, c.ko, c.ja, ...c.aliases];
     if (!hit(names) && norm(c.code) !== q) continue;

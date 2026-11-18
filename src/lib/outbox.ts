@@ -1,4 +1,4 @@
-// Wild finds are often recorded without signal. A find that cannot be uploaded is kept on the phone
+// Observations are often recorded without signal. One that cannot be uploaded is kept on the phone
 // (row + photo copies in the app's documents folder) and uploaded later, automatically.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';

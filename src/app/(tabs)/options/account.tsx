@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -29,7 +28,7 @@ export default function AccountScreen() {
     if (!supabase || !user) return;
     const ok = await confirmAsync(
       t('계정을 삭제할까요?', 'Delete your account?', 'アカウントを削除しますか？'),
-      t('내 식물, 야생 발견 기록, 분류, 사진이 모두 영구 삭제되며 되돌릴 수 없습니다.', 'Your plants, wild finds, categories and photos are deleted permanently. This cannot be undone.', '植物・発見記録・分類・写真がすべて完全に削除され、元に戻せません。'),
+      t('내 식물, 관찰 기록, 분류, 사진이 모두 영구 삭제되며 되돌릴 수 없습니다.', 'Your plants, observations, categories and photos are deleted permanently. This cannot be undone.', '植物・観察記録・分類・写真がすべて完全に削除され、元に戻せません。'),
       t('삭제', 'Delete', '削除'),
       t('취소', 'Cancel', 'キャンセル'),
       true,
@@ -41,7 +40,6 @@ export default function AccountScreen() {
       if (error) throw error;
       if (data && typeof data === 'object' && 'error' in data) throw new Error(String((data as { error: unknown }).error));
       for (const q of await readOutbox(user.id)) await discardQueued(user.id, q.row.id);
-      await AsyncStorage.removeItem(`pm-cats-seeded-${user.id}`);
       await out();
       notify(t('계정을 삭제했습니다', 'Account deleted', 'アカウントを削除しました'));
       router.replace('/');
@@ -61,7 +59,7 @@ export default function AccountScreen() {
           <SetupNotice />
         ) : !user ? (
           <>
-            <Notice>{t('로그인하면 내 식물과 야생 발견 기록을 저장할 수 있습니다. 행사와 매장은 로그인 없이도 볼 수 있습니다.', 'Sign in to save your plants and wild finds. Events and shops are open to everyone.', 'ログインすると植物と発見記録を保存できます。イベントとショップはログインなしで見られます。')}</Notice>
+            <Notice>{t('로그인하면 내 식물과 관찰 기록을 저장할 수 있습니다. 행사와 매장은 로그인 없이도 볼 수 있습니다.', 'Sign in to save your plants and observations. Events and shops are open to everyone.', 'ログインすると植物と観察記録を保存できます。イベントとショップはログインなしで見られます。')}</Notice>
             <Button label={t('로그인 / 가입', 'Sign in / Sign up', 'ログイン / 登録')} onPress={() => router.push('/auth')} testID="account-login" />
           </>
         ) : (

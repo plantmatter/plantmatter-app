@@ -9,6 +9,8 @@ export const C = {
   faint: '#D4D4D4',
   line: '#E3E3E3',
   rule: '#555555',
+  /** Thin light-grey divider (lists on the grey page). */
+  hair: '#D0D0D0',
   lime: '#C5FE23',
   danger: '#B8432F',
   overlay: 'rgba(0,0,0,0.35)',
