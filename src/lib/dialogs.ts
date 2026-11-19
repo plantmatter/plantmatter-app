@@ -21,10 +21,15 @@ export function notify(title: string, message = '') {
 
 /**
  * Pick one of a few actions from the system sheet (iOS action sheet, Android dialog).
- * Resolves with the index of the chosen option, or -1 when cancelled. On web (test build) the first option is taken.
+ * Resolves with the index of the chosen option, or -1 when cancelled. On web (test build) the first option is taken
+ * unless the test answers.
  */
 export function chooseAsync(options: string[], cancel: string, title?: string): Promise<number> {
-  if (Platform.OS === 'web') return Promise.resolve(0);
+  // The web build is only used for tests: a test build (EXPO_PUBLIC_TEST_HOOKS=1) lets the test answer with `globalThis.__pmChoose(options)`.
+  if (Platform.OS === 'web') {
+    const pick = process.env.EXPO_PUBLIC_TEST_HOOKS === '1' ? (globalThis as { __pmChoose?: (o: string[]) => number }).__pmChoose : undefined;
+    return Promise.resolve(pick ? pick(options) : 0);
+  }
   if (Platform.OS === 'ios')
     return new Promise((resolve) =>
       ActionSheetIOS.showActionSheetWithOptions({ options: [...options, cancel], cancelButtonIndex: options.length, title }, (i) => resolve(i === options.length ? -1 : i)),

@@ -1,13 +1,13 @@
--- PLANT MATTER app — database schema (v0.1.4)
+-- PLANT MATTER app — database schema (v0.1.5)
 -- Run once in a NEW Supabase project: SQL Editor → paste everything → Run. Safe to run again.
 --
 -- What it creates
 --   profiles          display name and terms agreement (one row per account)
 --   beta_invites      e-mail addresses allowed to use the beta (managed here, in the SQL Editor)
 --   app_admins        accounts that may post MATTER events and shops (managed here)
---   plant_categories  "My Plants" categories, two levels
---   plants            kept plants (family, genus = category, species, cultivar, origin, seed / pollen parents,
---                     photos, shop, last watering)
+--   plant_categories  "My Plants" categories made by the user: 대분류 › 중분류 › 소분류 (three levels at most)
+--   plants            kept plants (category, family, genus, sp./cf./aff., species, additional name, origin,
+--                     seed / pollen parents, photos, shop, last watering, own list order)
 --   finds             observations (family, name with sp./cf./aff., additional name and author, recorded by, country or region,
 --                     locality / coordinates hidden by default, elevation, habitat, occurrence ID, and the
 --                     Found Wild record: time, growth form, substrate, phenology, measurements, collection)
@@ -110,10 +110,10 @@ drop policy if exists "Own categories remove" on public.plant_categories;
 create policy "Own categories read" on public.plant_categories for select to authenticated using (owner_id = (select auth.uid()));
 -- A sub-category must sit under one of your own top-level categories (two levels at most).
 create policy "Own categories add" on public.plant_categories for insert to authenticated
-  with check (public.is_beta_member() and owner_id = (select auth.uid()) and (parent_id is null or private.owns_top_category(parent_id)));
+  with check (public.is_beta_member() and owner_id = (select auth.uid()) and (parent_id is null or private.owns_category(parent_id)));
 create policy "Own categories edit" on public.plant_categories for update to authenticated
   using (owner_id = (select auth.uid()))
-  with check (owner_id = (select auth.uid()) and (parent_id is null or (parent_id <> id and private.owns_top_category(parent_id))));
+  with check (owner_id = (select auth.uid()) and (parent_id is null or (parent_id <> id and private.owns_category(parent_id))));
 create policy "Own categories remove" on public.plant_categories for delete to authenticated using (owner_id = (select auth.uid()));
 revoke all on public.plant_categories from anon;
 grant select, insert, update, delete on public.plant_categories to authenticated;
@@ -452,13 +452,14 @@ do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'plants_family_length') then
     alter table public.plants add constraint plants_family_length check (char_length(family) <= 60);
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'finds_family_and_name_v014') then
-    alter table public.finds add constraint finds_family_and_name_v014 check (
+  -- (v0.1.4 also required sp. for an additional name; v0.1.5 drops that rule, so it is not created here.)
+  if not exists (select 1 from pg_constraint where conname = 'finds_family_and_name_v015') then
+    alter table public.finds add constraint finds_family_and_name_v015 check (
       char_length(family) <= 60
-      and (cultivar is null or char_length(cultivar) <= 100)
-      and (cultivar is null or qualifier = 'sp.'));
+      and (cultivar is null or char_length(cultivar) <= 100));
   end if;
 end $$;
+alter table public.finds drop constraint if exists finds_family_and_name_v014;
 -- The v0.1.2 rule allowed only cf. / aff.; rebuild it with sp. (same rule otherwise).
 alter table public.finds drop constraint if exists finds_field_record;
 alter table public.finds add constraint finds_field_record check (
@@ -471,6 +472,67 @@ alter table public.finds add constraint finds_field_record check (
   and ((latitude is null) = (longitude is null))
   and (elevation_m is null or elevation_m between -500 and 9000)
   and (occurrence_id is null or occurrence_id ~ '^PM-[0-9]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$'));
+
+-- 14. v0.1.5 · CATEGORIES IN THREE LEVELS, sp./cf./aff. AND OWN ORDER FOR PLANTS -----------------------------
+-- Categories are made by the user (no longer one per genus): 대분류 › 중분류 › 소분류. A category may sit under
+-- any category of the same account, three levels deep at most and never inside itself. Names are unique per
+-- level (letter case ignored). Plants get sp./cf./aff. and a position for "my own order".
+alter table public.plants add column if not exists qualifier text;
+alter table public.plants add column if not exists sort_order integer not null default 0;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'plants_qualifier') then
+    alter table public.plants add constraint plants_qualifier check (qualifier is null or qualifier in ('sp.', 'cf.', 'aff.'));
+  end if;
+end $$;
+
+drop policy if exists "Own categories add" on public.plant_categories;
+drop policy if exists "Own categories edit" on public.plant_categories;
+create policy "Own categories add" on public.plant_categories for insert to authenticated
+  with check (public.is_beta_member() and owner_id = (select auth.uid()) and (parent_id is null or private.owns_category(parent_id)));
+create policy "Own categories edit" on public.plant_categories for update to authenticated
+  using (owner_id = (select auth.uid()))
+  with check (owner_id = (select auth.uid()) and (parent_id is null or (parent_id <> id and private.owns_category(parent_id))));
+
+create or replace function private.check_category_tree()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  above integer := 0;   -- levels from the new parent up to the top
+  below integer := 0;   -- levels under this category
+  cur uuid := new.parent_id;
+begin
+  while cur is not null loop
+    if cur = new.id then
+      raise exception 'A category cannot go inside itself' using errcode = '23514';
+    end if;
+    above := above + 1;
+    if above >= 3 then
+      raise exception 'Categories go three levels deep at most' using errcode = '23514';
+    end if;
+    select c.parent_id into cur from public.plant_categories c where c.id = cur;
+  end loop;
+  if tg_op = 'UPDATE' then
+    with recursive sub(id, lvl) as (
+      select c.id, 1 from public.plant_categories c where c.parent_id = new.id
+      union all
+      select c.id, s.lvl + 1 from public.plant_categories c join sub s on c.parent_id = s.id where s.lvl < 4
+    ) select coalesce(max(lvl), 0) into below from sub;
+  end if;
+  if above + 1 + below > 3 then
+    raise exception 'Categories go three levels deep at most' using errcode = '23514';
+  end if;
+  return new;
+end $$;
+revoke all on function private.check_category_tree() from public;
+drop trigger if exists plant_categories_tree on public.plant_categories;
+create trigger plant_categories_tree before insert or update of parent_id on public.plant_categories
+  for each row execute function private.check_category_tree();
+
+do $$ begin
+  create unique index if not exists plant_categories_unique_child
+    on public.plant_categories (parent_id, lower(name)) where parent_id is not null;
+exception when unique_violation then
+  raise notice 'Two sub-categories in one place share a name. Rename one in the app, then run this file again.';
+end $$;
 
 notify pgrst, 'reload schema';
 

@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/lib/i18n';
 import { BAR_HEIGHT, C } from '@/lib/theme';
 
-import { ChevronLeft, Menu, PencilIcon, Plus } from './icons';
+import { ChevronLeft, Menu, Plus } from './icons';
 import { Txt } from './txt';
 
 type Props = {
@@ -16,15 +16,16 @@ type Props = {
   onBack?: () => void;
   onAdd?: () => void;
   addLabel?: string;
-  /** Pencil icon at the right (detail screens). */
+  /** "EDIT" (thin capitals) at the right; `editLabel` replaces it, e.g. "DONE" while editing. */
   onEdit?: () => void;
+  editLabel?: string;
   editTestID?: string;
   onMenu?: () => void;
   right?: ReactNode;
   title?: string;
 };
 
-export function TopBar({ left = 'back', onBack, onAdd, addLabel, onEdit, editTestID, onMenu, right, title }: Props) {
+export function TopBar({ left = 'back', onBack, onAdd, addLabel, onEdit, editLabel, editTestID, onMenu, right, title }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
   const back = () => (onBack ? onBack() : router.canGoBack() ? router.back() : router.replace('/'));
@@ -48,8 +49,10 @@ export function TopBar({ left = 'back', onBack, onAdd, addLabel, onEdit, editTes
       <View style={[styles.side, styles.right]}>
         {right}
         {onEdit && (
-          <Pressable onPress={onEdit} hitSlop={10} style={styles.icon} accessibilityRole="button" accessibilityLabel={t('편집', 'Edit', '編集')} testID={editTestID ?? 'top-edit'}>
-            <PencilIcon />
+          <Pressable onPress={onEdit} hitSlop={10} style={styles.textButton} accessibilityRole="button" accessibilityLabel={editLabel === 'DONE' ? t('완료', 'Done', '完了') : t('편집', 'Edit', '編集')} testID={editTestID ?? 'top-edit'}>
+            <Txt size={17} style={{ letterSpacing: 0.8 }}>
+              {editLabel ?? 'EDIT'}
+            </Txt>
           </Pressable>
         )}
         {onAdd && (
@@ -79,6 +82,7 @@ const styles = StyleSheet.create({
   side: { flexDirection: 'row', alignItems: 'center', minWidth: 44, flex: 1 },
   right: { justifyContent: 'flex-end', gap: 6 },
   icon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  textButton: { minHeight: 44, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
   logo: { width: 150, height: 14 },
   title: { flex: 2, textAlign: 'center', letterSpacing: 1 },
 });

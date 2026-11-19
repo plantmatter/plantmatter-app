@@ -1,4 +1,4 @@
-// Scientific names typed in parts: genus (also the My Plants category), species epithet, cultivar / grex.
+// Scientific names typed in parts: genus, qualifier (sp. / cf. / aff.), species epithet, additional name.
 import { crossName } from './format';
 import { tr, type Locale } from './locale';
 
@@ -18,22 +18,23 @@ export const sameGenus = (a: string | null | undefined, b: string | null | undef
 /** Strip quotes the user may type around a cultivar name. */
 export const cleanCultivar = (raw: string | null | undefined) => (raw ?? '').trim().replace(/^['"‘’“”]+|['"‘’“”]+$/g, '').trim().slice(0, 100);
 
-type Parts = { genus?: string | null; species?: string | null; cultivar?: string | null; seed?: string | null; pollen?: string | null };
+type Parts = { genus?: string | null; qualifier?: Qualifier | null; species?: string | null; cultivar?: string | null; seed?: string | null; pollen?: string | null };
 /**
- * The name shown everywhere:
- *   Genus species 'Cultivar'  ·  Genus sp.  ·  seed × pollen (a cross without a species name)
+ * The name of a kept plant:
+ *   Genus species 'Additional'  ·  Genus cf. species 'Additional'  ·  Genus sp. 'Additional'
+ *   seed × pollen 'Additional' (no qualifier, no species epithet, both parents set)
  */
-export function composeName({ genus, species, cultivar, seed, pollen }: Parts) {
+export function composeName({ genus, qualifier, species, cultivar, seed, pollen }: Parts) {
   const g = normalizeGenus(genus);
-  const s = (species ?? '').trim().slice(0, 100);
+  const { species: s, qualifier: q } = splitQualifier(species, qualifier);
   const c = cleanCultivar(cultivar);
   const quoted = c ? `'${c}'` : '';
-  if (!s) {
+  if (!s && q !== 'sp.') {
     const cross = crossName(seed, pollen);
     if (cross) return [cross, quoted].filter(Boolean).join(' ').slice(0, 160);
   }
   if (!g && !s) return quoted ? quoted : '';
-  return [g, s || (g ? 'sp.' : ''), quoted].filter(Boolean).join(' ').slice(0, 160);
+  return [g, s ? q : '', s || (g ? 'sp.' : ''), quoted].filter(Boolean).join(' ').slice(0, 160);
 }
 
 /** Best guess of the parts of a name typed before v0.1.1 (one free text field). */
@@ -101,8 +102,8 @@ type FindParts = { genus?: string | null; qualifier?: Qualifier | null; species?
 /**
  * Observation name in pieces, typeset the botanical way: genus and epithet in italics; sp., cf., aff. and the
  * author upright. cf./aff. and the author need a species epithet ("Bulbophyllum sp." takes neither);
- * an explicit sp. may carry an additional name in quotes.
- *   Bulbophyllum cf. echinolabium J.J.Sm.  ·  Bulbophyllum sp.  ·  Selaginella sp. 'Blue'
+ * an additional name in quotes may follow any of them.
+ *   Bulbophyllum cf. echinolabium J.J.Sm. 'Red'  ·  Bulbophyllum sp.  ·  Selaginella sp. 'Blue'
  */
 export function findNamePieces({ genus, qualifier, species, authority, cultivar }: FindParts): NamePiece[] {
   const g = normalizeGenus(genus);
@@ -111,16 +112,16 @@ export function findNamePieces({ genus, qualifier, species, authority, cultivar 
   if (!g && !s) return [];
   const out: NamePiece[] = [];
   if (g) out.push({ text: g, italic: true });
+  const c = cleanCultivar(cultivar);
   if (!s) {
     out.push({ text: 'sp.', italic: false });
-    // An additional name goes with an explicit sp.: Selaginella sp. 'Blue'
-    const c = q === 'sp.' ? cleanCultivar(cultivar) : '';
     if (c) out.push({ text: `'${c}'`, italic: false });
     return out;
   }
   if (q) out.push({ text: q, italic: false });
   out.push({ text: s, italic: true });
   if (a) out.push({ text: a, italic: false });
+  if (c) out.push({ text: `'${c}'`, italic: false });
   return out;
 }
 export const piecesText = (pieces: NamePiece[]) => pieces.map((p) => p.text).join(' ');
@@ -134,3 +135,7 @@ export function piecesOfName(name: string): NamePiece[] {
     .filter(Boolean)
     .map((w) => ({ text: w, italic: !UPRIGHT.has(w.toLowerCase()) && !/^['‘’"“”(]/.test(w) }));
 }
+
+/** Genera used before in plants and observations, A→Z (for the buttons under the genus box). */
+export const knownGenera = (records: { genus?: string | null }[]) =>
+  [...new Map(records.map((r) => normalizeGenus(r.genus)).filter(Boolean).map((g) => [g.toLowerCase(), g] as const)).values()].sort((a, b) => a.localeCompare(b));

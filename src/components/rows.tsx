@@ -47,7 +47,7 @@ export function ItemRow({ name, meta, thumb, onPress, badge, strong, testID }: {
           </View>
         )}
       </View>
-      {strong ? <ChevronRight size={24} weight={1.8} color={C.ink} /> : <ChevronRight />}
+      {strong ? <ChevronRight size={24} color={C.ink} /> : <ChevronRight />}
     </Pressable>
   );
 }
@@ -84,7 +84,7 @@ export function PlusButton({ onPress, label, size = 44, testID }: { onPress: () 
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={6} testID={testID}
       style={({ pressed }) => [{ width: size, height: size, borderRadius: size / 2, borderWidth: 1, borderColor: '#BDBDBD', backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}>
-      <Plus size={size * 0.42} weight={1.6} />
+      <Plus size={size * 0.5} />
     </Pressable>
   );
 }

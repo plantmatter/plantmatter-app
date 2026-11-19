@@ -26,6 +26,8 @@ export type Plant = {
   /** Family (v0.1.4); not part of the shown name. */
   family: string;
   genus: string | null;
+  /** sp. / cf. / aff. (v0.1.5). */
+  qualifier: 'sp.' | 'cf.' | 'aff.' | null;
   species: string | null;
   cultivar: string | null;
   nickname: string;
@@ -43,6 +45,8 @@ export type Plant = {
   shop: string;
   /** Last watering (v0.1.3); "주기 리셋" sets it to today. */
   last_watered_on: string | null;
+  /** Place in "직접 정한 순서" (v0.1.5); smaller first. */
+  sort_order: number;
   created_at?: string;
   updated_at?: string;
 };
@@ -57,7 +61,7 @@ export type Find = {
   genus: string | null;
   /** sp. (v0.1.4) / cf. / aff. (v0.1.2). */
   qualifier: 'sp.' | 'cf.' | 'aff.' | null;
-  /** Additional name with sp. (v0.1.4): Selaginella sp. 'Blue'. */
+  /** Additional name (v0.1.4; with any qualifier since v0.1.5): Selaginella sp. 'Blue'. */
   cultivar: string | null;
   species: string | null;
   /** Author citation of the name (v0.1.2). */

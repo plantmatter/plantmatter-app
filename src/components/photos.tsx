@@ -125,7 +125,7 @@ export function PhotoField({ label, photos, onChange, max, resolve, maxSide = 16
             accessibilityRole="button"
             accessibilityLabel={t('사진 추가', 'Add photos', '写真を追加')}
             testID={testID ? `${testID}-add` : undefined}>
-            {busy ? <ActivityIndicator color={C.muted} /> : <Plus size={26} weight={1.5} color="#8A8A8A" />}
+            {busy ? <ActivityIndicator color={C.muted} /> : <Plus size={28} color="#8A8A8A" />}
           </Pressable>
         )}
       </View>

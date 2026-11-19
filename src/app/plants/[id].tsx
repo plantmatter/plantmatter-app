@@ -10,7 +10,7 @@ import { ItemRow } from '@/components/rows';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
 import { Button, InfoRow, Loading, Notice, Page, SectionHead, VisibilityField } from '@/components/ui';
-import { categoryPath, deletePlant, setPlantPrivate, setWatered, useCategories, usePlants } from '@/lib/data';
+import { deletePlant, pathLabel, setPlantPrivate, setWatered, useCategories, usePlants } from '@/lib/data';
 import { confirmAsync, notify } from '@/lib/dialogs';
 import { dayLabel, daysSince, todayStr } from '@/lib/format';
 import { originLabel } from '@/lib/geo';
@@ -86,7 +86,7 @@ function PlantDetail({ id }: { id: string }) {
     if (!ok) return;
     setBusy(true);
     try {
-      await deletePlant(plant, cats, plants);
+      await deletePlant(plant);
       await Promise.all([qc.invalidateQueries({ queryKey: ['plants'] }), qc.invalidateQueries({ queryKey: ['categories'] })]);
       router.back();
     } catch (e) {
@@ -147,9 +147,10 @@ function PlantDetail({ id }: { id: string }) {
       {more && (
         <View testID="plant-more-section">
           <Txt size={10} color={C.muted} style={{ letterSpacing: 1.2, marginBottom: 6 }}>
-            {['MY PLANTS', categoryPath(cats, p.category_id) || t('미분류', 'Unsorted', '未分類')].join(' / ')}
+            {['MY PLANTS', ...(pathLabel(cats, p.category_id) ? pathLabel(cats, p.category_id).split(' › ') : [t('미분류', 'Unsorted', '未分類')])].join(' / ')}
           </Txt>
-          <InfoRow label={t('속', 'Genus', '属')} value={categoryPath(cats, p.category_id) || p.genus || t('미분류', 'Unsorted', '未分類')} testID="plant-info-category" />
+          <InfoRow label={t('분류', 'Category', '分類')} value={pathLabel(cats, p.category_id) || t('미분류', 'Unsorted', '未分類')} testID="plant-info-category" />
+          <InfoRow label={t('속', 'Genus', '属')} value={p.genus ?? ''} testID="plant-info-genus" />
           <InfoRow label={t('별칭', 'Nickname', '愛称')} value={p.nickname} testID="plant-info-nickname" />
           <InfoRow label={t('원산지', 'Origin', '原産地')} value={originLabel(p.origin_region, p.origin_place, locale)} testID="plant-info-origin" />
           {parent(p.seed_parent_id, p.seed_parent_name, t('모본 (♀)', 'Seed (♀)', '母本 (♀)'), 'plant-info-seed')}

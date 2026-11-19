@@ -2,9 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from './auth';
-import { composeName, normalizeGenus, sameGenus } from './names';
 import { removePhotos } from './photos';
 import { MEDIA_BUCKET, supabase, USER_BUCKET } from './supabase';
+import { canMoveUnder, childrenOf, depthOf, MAX_DEPTH, nameTaken, plantsDirectlyIn } from './tree';
 import type { Category, Find, MatterEvent, MatterShop, Plant } from './types';
 
 const need = () => {
@@ -89,88 +89,132 @@ export function useShops() {
   });
 }
 
-// ---------- categories = genera ----------
-// v0.1.1: a plant's genus is its My Plants category. Typing a new genus creates the category; a genus
-// category that no longer holds any plant is removed, so the genus suggestions stay tidy.
-// Every update file also carries the earlier ones, so the newest file is always the one to run.
-const MIGRATION = 'v0.1.4';
+// ---------- categories (v0.1.5: made by the user, up to three levels) ----------
+// The genus is part of the name only; it no longer decides the category.
+const MIGRATION = 'v0.1.5';
 /** Turn "column … does not exist" from an old database into a clear message. */
 export function schemaHint(e: unknown) {
   const m = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : String(e);
-  if (/schema cache|column .* does not exist|could not find the '.*' column/i.test(m))
+  if (/schema cache|column .* does not exist|could not find the '.*' column|new row violates row-level security policy for table "plant_categories"/i.test(m))
     return `데이터베이스 업데이트가 필요합니다. Supabase SQL Editor에서 supabase/${MIGRATION}.sql을 실행해 주세요. (Run supabase/${MIGRATION}.sql in the Supabase SQL Editor.)`;
   return m;
 }
 const failSchema = (error: unknown) => {
   if (error) throw new Error(schemaHint(error));
 };
+type T = (ko: string, en: string, ja: string) => string;
 
-export const genusCategory = (cats: Category[], genus: string | null | undefined) =>
-  cats.find((c) => !c.parent_id && sameGenus(c.name, genus)) ?? null;
+const cleanName = (raw: string) => raw.replace(/\s+/g, ' ').trim().slice(0, 40);
+const exists = (t: T, name: string) => new Error(t(`같은 자리에 "${name}"이(가) 이미 있습니다`, `"${name}" already exists here`, `「${name}」はすでにあります`));
 
-/** The category for a genus: the existing one (any letter case) or a new one. */
-export async function ensureGenusCategory(uid: string, genus: string, cats: Category[]) {
-  const name = normalizeGenus(genus).slice(0, 40);
-  const found = genusCategory(cats, name);
-  if (found) return found.id;
-  const sort = cats.reduce((m, c) => Math.max(m, c.sort_order), 0) + 10;
-  const { data, error } = await need().from('plant_categories').insert({ owner_id: uid, name, parent_id: null, sort_order: sort }).select('id').single();
+export async function createCategory(uid: string, rawName: string, parentId: string | null, cats: Category[], t: T) {
+  const name = cleanName(rawName);
+  if (!name) throw new Error(t('이름을 입력해 주세요', 'Enter a name', '名前を入力してください'));
+  if (parentId && depthOf(cats, parentId) >= MAX_DEPTH) throw new Error(t('분류는 3단계까지 만들 수 있습니다', 'Categories go three levels deep at most', '分類は3段階までです'));
+  if (nameTaken(cats, parentId, name)) throw exists(t, name);
+  const sort = childrenOf(cats, parentId).reduce((m, c) => Math.max(m, c.sort_order), 0) + 10;
+  const { data, error } = await need().from('plant_categories').insert({ owner_id: uid, name, parent_id: parentId, sort_order: sort }).select('id').single();
   failSchema(error);
   return (data as { id: string }).id;
 }
 
-/**
- * Rename a genus category and the genus of every plant in it (fixes a typo everywhere).
- * Renaming to a genus that already has a category merges the two.
- */
-/** Returns the id of the category the plants are in afterwards (another one when the rename merged two genera). */
-export async function renameGenusCategory(cat: Category, newName: string, cats: Category[], plants: Plant[]): Promise<string> {
-  const db = need();
-  const name = normalizeGenus(newName).slice(0, 40);
-  if (!name) return cat.id;
-  const other = cats.find((c) => c.id !== cat.id && !c.parent_id && sameGenus(c.name, name));
-  if (!other) {
-    const { error } = await db.from('plant_categories').update({ name }).eq('id', cat.id);
-    failSchema(error);
-  }
-  const target = other ? other.id : cat.id;
-  for (const p of plants.filter((x) => x.category_id === cat.id)) {
-    const parts = { genus: name, species: p.species, cultivar: p.cultivar, seed: p.seed_parent_name, pollen: p.pollen_parent_name };
-    const res = await db.from('plants').update({ genus: name, category_id: target, scientific_name: composeName(parts) || p.scientific_name }).eq('id', p.id);
-    failSchema(res.error);
-  }
-  if (other) await db.from('plant_categories').delete().eq('id', cat.id);
-  return target;
+export async function renameCategory(cat: Category, rawName: string, cats: Category[], t: T) {
+  const name = cleanName(rawName);
+  if (!name || name === cat.name) return;
+  if (nameTaken(cats, cat.parent_id ?? null, name, cat.id)) throw exists(t, name);
+  const { error } = await need().from('plant_categories').update({ name }).eq('id', cat.id);
+  failSchema(error);
 }
 
-/** Remove genus categories that hold no plants any more. */
-export async function dropEmptyCategories(cats: Category[], plants: Plant[], keep: string[] = []) {
-  const used = new Set(plants.map((p) => p.category_id).filter(Boolean));
-  const empty = cats.filter((c) => !used.has(c.id) && !keep.includes(c.id) && !cats.some((x) => x.parent_id === c.id));
-  if (!empty.length) return;
+/** Put a category (with what is under it) under another one, or at the top (null). */
+export async function moveCategory(cat: Category, newParent: string | null, cats: Category[], t: T) {
+  if (!canMoveUnder(cats, cat.id, newParent)) throw new Error(t('그 자리로는 옮길 수 없습니다 (분류는 3단계까지)', 'It cannot go there (three levels at most)', 'そこには移動できません（3段階まで）'));
+  if (nameTaken(cats, newParent, cat.name, cat.id)) throw exists(t, cat.name);
+  const sort = childrenOf(cats, newParent).reduce((m, c) => Math.max(m, c.sort_order), 0) + 10;
+  const { error } = await need().from('plant_categories').update({ parent_id: newParent, sort_order: sort }).eq('id', cat.id);
+  failSchema(error);
+}
+
+/** Save a new order of sibling categories. */
+export async function reorderCategories(ids: string[]) {
   const db = need();
-  for (const c of empty) await db.from('plant_categories').delete().eq('id', c.id);
+  for (let i = 0; i < ids.length; i++) {
+    const { error } = await db.from('plant_categories').update({ sort_order: (i + 1) * 10 }).eq('id', ids[i]);
+    failSchema(error);
+  }
+}
+
+/**
+ * Delete a category. Nothing inside is lost: its plants and its sub-categories move one level up
+ * (to the top / 미분류 when it was a 대분류). Names stay unique at the new level.
+ */
+export async function deleteCategory(cat: Category, cats: Category[], plants: Plant[]) {
+  const db = need();
+  const up = cat.parent_id ?? null;
+  const ids = plantsDirectlyIn(plants, cat.id).map((p) => p.id);
+  if (ids.length) {
+    const { error } = await db.from('plants').update({ category_id: up }).in('id', ids);
+    failSchema(error);
+  }
+  const kids = childrenOf(cats, cat.id);
+  // A child may share the deleted category's name (Orchid › Orchid): free that name first.
+  if (kids.some((k) => k.name.toLowerCase() === cat.name.toLowerCase())) {
+    const { error } = await db.from('plant_categories').update({ name: `~${cat.id}`.slice(0, 40) }).eq('id', cat.id);
+    failSchema(error);
+  }
+  const taken = new Set(childrenOf(cats, up).filter((c) => c.id !== cat.id).map((c) => c.name.toLowerCase()));
+  for (const kid of kids) {
+    let name = kid.name;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${kid.name} (${n})`.slice(0, 40);
+    taken.add(name.toLowerCase());
+    const { error } = await db.from('plant_categories').update({ parent_id: up, name }).eq('id', kid.id);
+    failSchema(error);
+  }
+  const { error } = await db.from('plant_categories').delete().eq('id', cat.id);
+  failSchema(error);
 }
 
 // ---------- plants ----------
-export type PlantInput = Omit<Plant, 'owner_id' | 'created_at' | 'updated_at' | 'category_id'>;
-/** Saves the plant into the category of its genus (created when new), then tidies empty categories. */
-export async function savePlant(uid: string, row: PlantInput, previous: Plant | null, cats: Category[], plants: Plant[]) {
+export type PlantInput = Omit<Plant, 'owner_id' | 'created_at' | 'updated_at' | 'sort_order'>;
+/** Saves the plant in the category chosen in the form. New plants come first in "직접 정한 순서". */
+export async function savePlant(uid: string, row: PlantInput, previous: Plant | null, plants: Plant[]) {
   const db = need();
-  const category_id = row.genus ? await ensureGenusCategory(uid, row.genus, cats) : null;
-  const payload = { ...row, category_id, owner_id: uid };
+  const payload = previous ? { ...row, owner_id: uid } : { ...row, owner_id: uid, sort_order: plants.reduce((m, p) => Math.min(m, p.sort_order ?? 0), 0) - 10 };
   const { error } = previous ? await db.from('plants').update(payload).eq('id', row.id) : await db.from('plants').insert(payload);
   failSchema(error);
   const dropped = (previous?.photo_paths ?? []).filter((p) => !row.photo_paths.includes(p));
   await removePhotos(USER_BUCKET, dropped);
-  const after = [...plants.filter((p) => p.id !== row.id), { ...(previous ?? ({} as Plant)), ...payload } as Plant];
-  await dropEmptyCategories(cats, after, category_id ? [category_id] : []).catch(() => {});
 }
-export async function deletePlant(p: Plant, cats: Category[], plants: Plant[]) {
+export async function deletePlant(p: Plant) {
   const { error } = await need().from('plants').delete().eq('id', p.id);
   fail(error);
   await removePhotos(USER_BUCKET, p.photo_paths);
-  await dropEmptyCategories(cats, plants.filter((x) => x.id !== p.id)).catch(() => {});
+}
+/** EDIT: delete several plants (and their photos). */
+export async function deletePlants(list: Plant[]) {
+  if (!list.length) return;
+  const { error } = await need().from('plants').delete().in('id', list.map((p) => p.id));
+  fail(error);
+  await removePhotos(USER_BUCKET, list.flatMap((p) => p.photo_paths));
+}
+/** EDIT: move several plants to a category (null = 미분류). */
+export async function movePlants(ids: string[], categoryId: string | null) {
+  if (!ids.length) return;
+  const { error } = await need().from('plants').update({ category_id: categoryId }).in('id', ids);
+  failSchema(error);
+}
+export async function setPlantsPrivate(ids: string[], value: boolean) {
+  if (!ids.length) return;
+  const { error } = await need().from('plants').update({ is_private: value }).in('id', ids);
+  fail(error);
+}
+/** EDIT: save the dragged order ("직접 정한 순서") of the plants on the page. */
+export async function reorderPlants(ids: string[]) {
+  const db = need();
+  for (let i = 0; i < ids.length; i++) {
+    const { error } = await db.from('plants').update({ sort_order: (i + 1) * 10 }).eq('id', ids[i]);
+    failSchema(error);
+  }
 }
 /** "주기 리셋": record today's watering. */
 export async function setWatered(id: string, day: string) {
@@ -224,23 +268,5 @@ export async function deleteShop(s: MatterShop) {
   await removePhotos(MEDIA_BUCKET, s.photo_paths);
 }
 
-// ---------- tree helpers ----------
-const bySort = (a: Category, b: Category) => a.sort_order - b.sort_order || String(a.created_at ?? '').localeCompare(String(b.created_at ?? ''));
-export const topCategories = (cats: Category[]) => cats.filter((c) => !c.parent_id).sort(bySort);
-export const subCategories = (cats: Category[], id: string) => cats.filter((c) => c.parent_id === id).sort(bySort);
-export function categoryPath(cats: Category[], id: string | null | undefined) {
-  const c = cats.find((x) => x.id === id);
-  if (!c) return '';
-  const parent = c.parent_id ? cats.find((x) => x.id === c.parent_id) : null;
-  return parent ? `${parent.name} › ${c.name}` : c.name;
-}
-/** Plants directly in a category plus those in its sub-categories. */
-export function plantsInTop(plants: Plant[], cats: Category[], topId: string) {
-  const ids = new Set([topId, ...subCategories(cats, topId).map((s) => s.id)]);
-  return plants.filter((p) => p.category_id && ids.has(p.category_id));
-}
-export const countInTop = (plants: Plant[], cats: Category[], topId: string) => plantsInTop(plants, cats, topId).length;
-export const unsortedPlants = (plants: Plant[], cats: Category[]) => {
-  const ids = new Set(cats.map((c) => c.id));
-  return plants.filter((p) => !p.category_id || !ids.has(p.category_id));
-};
+// ---------- tree helpers (see tree.ts) ----------
+export { childrenOf, pathLabel, plantsUnder, unsortedPlants } from './tree';

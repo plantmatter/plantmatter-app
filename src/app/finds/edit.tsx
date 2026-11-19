@@ -17,13 +17,13 @@ import { Txt } from '@/components/txt';
 import { Button, ChoiceChips, Field, Label, Loading, Page, ScreenTitle, SectionHead, Segmented, VisibilityField } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { formatCoords, numText, parseCoords, parseDecimal, parseElevation } from '@/lib/coords';
-import { topCategories, useCategories, useFinds, usePlants } from '@/lib/data';
+import { useFinds, usePlants } from '@/lib/data';
 import { notify } from '@/lib/dialogs';
 import { isDateStr, isTimeStr, todayStr } from '@/lib/format';
 import { isCountry, regionOf } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { ABUNDANCE, GROWTH_FORMS, ID_STATUSES, idStatusLabel, MEASUREMENT_BASES, PHENOLOGY, presetText } from '@/lib/labels';
-import { cleanAuthority, cleanCultivar, composeFindName, displayName, familyForGenus, findNamePieces, knownFamilies, normalizeFamily, normalizeGenus, parseName, splitQualifier, UNIDENTIFIED, type Qualifier } from '@/lib/names';
+import { cleanAuthority, cleanCultivar, composeFindName, displayName, familyForGenus, findNamePieces, knownFamilies, knownGenera, normalizeFamily, normalizeGenus, parseName, splitQualifier, UNIDENTIFIED, type Qualifier } from '@/lib/names';
 import { newOccurrenceId } from '@/lib/occurrence';
 import { queuedAsFind, saveFind, useOutbox } from '@/lib/outbox';
 import { useSignedUrls, type FormPhoto } from '@/lib/photos';
@@ -110,17 +110,16 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
   const [busy, setBusy] = useState(false);
 
   const resolve = useSignedUrls(photos.map((p) => p.path));
-  const cats = useCategories().data ?? [];
   const finds = useFinds().data ?? [];
   const plantsForFamily = usePlants().data ?? [];
   const records = [...plantsForFamily, ...finds];
   // Genera already used in My Plants and in earlier observations.
-  const known = [...new Set([...topCategories(cats).map((c) => c.name), ...finds.map((f) => f.genus).filter((g): g is string => !!g)])].sort((a, b) => a.localeCompare(b));
+  const known = knownGenera(records);
   const typed = genus.trim().toLowerCase();
   const genusChoices = known.filter((g) => !typed || (g.toLowerCase().startsWith(typed) && g.toLowerCase() !== typed)).slice(0, 12);
   const split = splitQualifier(species, qualifier === 'none' ? null : qualifier);
   const isSp = qualifier === 'sp.';
-  const parts = { genus, qualifier: split.qualifier, species: split.species, authority: isSp ? '' : authority, cultivar: isSp ? cultivar : '' };
+  const parts = { genus, qualifier: split.qualifier, species: split.species, authority: isSp ? '' : authority, cultivar };
   const changeGenus = (v: string) => {
     setGenus(v);
     if (!familyTyped) setFamily(familyForGenus(records, v));
@@ -187,7 +186,7 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
           id,
           scientific_name: composeFindName(parts) || UNIDENTIFIED,
           family: normalizeFamily(family),
-          cultivar: split.qualifier === 'sp.' ? cleanCultivar(cultivar) || null : null,
+          cultivar: cleanCultivar(cultivar) || null,
           genus: normalizeGenus(genus) || null,
           qualifier: split.qualifier,
           species: split.species || null,
@@ -283,9 +282,6 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
       <Txt size={10} color={C.muted} style={{ marginTop: -8, marginBottom: 16, lineHeight: 15 }}>
         {t('sp. 속까지만 동정 · cf. 이 종으로 보이지만 확실하지 않음 · aff. 이 종과 가깝지만 다른 종일 수 있음.', 'sp. identified to genus only · cf. looks like this species but not confirmed · aff. close to this species but possibly another.', 'sp. 属まで同定・cf. この種に見えるが未確定・aff. この種に近いが別種の可能性。')}
       </Txt>
-      {isSp && (
-        <Field label={t('추가 식별명 (선택)', 'Additional name (optional)', '追加識別名（任意）')} value={cultivar} onChangeText={setCultivar} placeholder={t('예: Blue, Bosco Ecuador', 'e.g. Blue, Bosco Ecuador', '例：Blue, Bosco Ecuador')} autoCorrect={false} maxLength={100} testID="find-cultivar" />
-      )}
       <Field
         label={t('종소명 (선택)', 'Species (optional)', '種小名（任意）')}
         value={species}
@@ -311,6 +307,7 @@ function FindFormBody({ existing }: { existing: Existing | null }) {
         hint={t('학명을 처음 발표한 사람의 이름입니다. 보통 줄여서 씁니다. 종소명이 있을 때만 이름에 붙습니다.', 'Who first published the name, usually abbreviated. Added to the name only with a species epithet.', '学名を最初に発表した人の名前で、通常は略して書きます。種小名があるときだけ名前に付きます。')}
         testID="find-authority"
       />
+      <Field label={t('추가 식별명 (선택)', 'Additional name (optional)', '追加識別名（任意）')} value={cultivar} onChangeText={setCultivar} placeholder={t('예: Blue, Bosco Ecuador', 'e.g. Blue, Bosco Ecuador', '例：Blue, Bosco Ecuador')} autoCorrect={false} maxLength={100} testID="find-cultivar" />
       <NamePreview testID="find-name-preview">
         <SciName pieces={pieces.length ? pieces : [{ text: displayName(UNIDENTIFIED, locale), italic: false }]} size={16} testID="find-name-preview-text" />
       </NamePreview>
@@ -435,7 +432,7 @@ function FoldHead({ title, open, onPress, testID }: { title: string; open: boole
       <Txt weight="bold" size={11} style={{ letterSpacing: 1.6, flex: 1 }}>
         {title}
       </Txt>
-      <ChevronDown size={20} weight={1.6} up={open} />
+      <ChevronDown size={20} up={open} />
     </Pressable>
   );
 }

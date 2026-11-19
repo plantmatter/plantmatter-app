@@ -1,120 +1,340 @@
-import { useQueryClient } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CategoryPicker } from '@/components/category-picker';
+import { CategoryRows } from '@/components/category-rows';
 import { MemberGate } from '@/components/gate';
+import { CheckMark, Plus, SearchIcon, SortIcon } from '@/components/icons';
 import { usePrompt } from '@/components/prompt';
+import { ReorderList } from '@/components/reorder-list';
 import { ItemRow, TextAction } from '@/components/rows';
-import { SearchField } from '@/components/search-field';
+import { SearchPanel } from '@/components/search-panel';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
 import { Loading, Notice, Page } from '@/components/ui';
-import { plantsInTop, renameGenusCategory, unsortedPlants, useCategories, usePlants } from '@/lib/data';
-import { notify } from '@/lib/dialogs';
+import { useAuth } from '@/lib/auth';
+import { deletePlants, movePlants, renameCategory, reorderPlants, setPlantsPrivate, useCategories, usePlants } from '@/lib/data';
+import { chooseAsync, confirmAsync } from '@/lib/dialogs';
 import { originLabel } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { idStatusLabel } from '@/lib/labels';
-import { useSignedUrls } from '@/lib/photos';
 import { addPlant } from '@/lib/nav';
-import { matchesPlant, newestFirst } from '@/lib/search';
+import { useSignedUrls } from '@/lib/photos';
+import { matchesPlant } from '@/lib/search';
 import { errorText } from '@/lib/supabase';
-import { C } from '@/lib/theme';
+import { BAR_HEIGHT, C } from '@/lib/theme';
+import { childrenOf, depthOf, MAX_DEPTH, PLANT_SORTS, plantsDirectlyIn, plantsUnder, sortPlants, unsortedPlants, type PlantSort } from '@/lib/tree';
+import type { Plant } from '@/lib/types';
+import { useCategoryEdit } from '@/lib/use-categories-edit';
 
-/** One My Plants collection on its own page: All, Unsorted or one genus. */
-export default function CollectionScreen() {
-  const { t } = useLocale();
-  const { key } = useLocalSearchParams<{ key: string }>();
-  const cats = useCategories().data ?? [];
-  const genus = cats.find((c) => c.id === key && !c.parent_id)?.name;
-  return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <TopBar onAdd={() => addPlant(genus)} addLabel={genus ? t(`${genus} 식물 추가`, `Add a ${genus}`, `${genus}を追加`) : t('식물 추가', 'Add plant', '植物を追加')} />
-      <Page testID="collection-screen">
-        <MemberGate what={t('내 식물', 'My Plants', 'マイ植物')}>
-          <Collection key={key} id={String(key ?? 'all')} />
-        </MemberGate>
-      </Page>
-    </View>
-  );
+const SORT_KEY = 'pm-plant-sort';
+const PLANT_ROW = 80;
+
+/** The list order chosen with ↓↑, remembered on this phone for every My Plants page. */
+function useSortChoice() {
+  const [sort, setSort] = useState<PlantSort>('newest');
+  useEffect(() => {
+    AsyncStorage.getItem(SORT_KEY)
+      .then((v) => v && (PLANT_SORTS as string[]).includes(v) && setSort(v as PlantSort))
+      .catch(() => {});
+  }, []);
+  const choose = (v: PlantSort) => {
+    setSort(v);
+    AsyncStorage.setItem(SORT_KEY, v).catch(() => {});
+  };
+  return [sort, choose] as const;
 }
 
-function Collection({ id }: { id: string }) {
+/** One My Plants page: All, 미분류 or one category (its sub-categories, then the plants directly in it). */
+export default function CollectionScreen() {
   const { t, locale } = useLocale();
-  const qc = useQueryClient();
+  const { member } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { key } = useLocalSearchParams<{ key: string }>();
+  const id = String(key ?? 'all');
   const prompt = usePrompt();
+  const edit = useCategoryEdit();
   const catsQ = useCategories();
   const plantsQ = usePlants();
   const cats = useMemo(() => catsQ.data ?? [], [catsQ.data]);
   const plants = useMemo(() => plantsQ.data ?? [], [plantsQ.data]);
+  const [sort, setSort] = useSortChoice();
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
-  const cat = cats.find((c) => c.id === id && !c.parent_id);
-  const inHere = useMemo(() => newestFirst(id === 'all' ? plants : id === 'unsorted' ? unsortedPlants(plants, cats) : cat ? plantsInTop(plants, cats, cat.id) : []), [id, plants, cats, cat]);
-  const shown = useMemo(() => inHere.filter((p) => matchesPlant(p, query)), [inHere, query]);
-  const resolve = useSignedUrls(shown.map((p) => p.photo_paths[0]));
+  const [movingPlants, setMovingPlants] = useState(false);
 
-  if (catsQ.isLoading || plantsQ.isLoading) return <Loading />;
-  if (catsQ.error || plantsQ.error) return <Notice tone="warning">{errorText(catsQ.error ?? plantsQ.error)}</Notice>;
-  if (id !== 'all' && id !== 'unsorted' && !cat)
-    return <Notice>{t('이 분류는 더 이상 없습니다. 식물이 모두 다른 속으로 옮겨졌을 수 있습니다.', 'This category no longer exists. Its plants may have moved to another genus.', 'この分類はもうありません。植物が別の属へ移動した可能性があります。')}</Notice>;
+  const cat = cats.find((c) => c.id === id) ?? null;
+  // Everything this page holds (for the count and the search), and what is listed directly on it.
+  const all = id === 'all' ? plants : id === 'unsorted' ? unsortedPlants(plants, cats) : cat ? plantsUnder(plants, cats, cat.id) : [];
+  const direct = cat ? plantsDirectlyIn(plants, cat.id) : all;
+  const q = query.trim();
+  const listed = sortPlants(q ? all.filter((p) => matchesPlant(p, q)) : direct, sort);
+  const kids = cat ? childrenOf(cats, cat.id) : [];
+  const chosen = plants.filter((p) => selected.includes(p.id));
+  const title = id === 'all' ? 'All' : id === 'unsorted' ? t('미분류', 'Unsorted', '未分類') : (cat?.name ?? '');
 
-  const title = id === 'all' ? 'All' : id === 'unsorted' ? t('미분류', 'Unsorted', '未分類') : cat!.name;
+  const toggleEdit = () => {
+    setSearching(false);
+    setQuery('');
+    setSelected([]);
+    setEditing(!editing);
+  };
+  const toggle = (pid: string) => setSelected(selected.includes(pid) ? selected.filter((x) => x !== pid) : [...selected, pid]);
+  const sortLabel = (s: PlantSort) =>
+    ({
+      newest: t('최근 등록순', 'Newest first', '登録が新しい順'),
+      oldest: t('오래된 등록순', 'Oldest first', '登録が古い順'),
+      name: t('이름순', 'By name', '名前順'),
+      watering: t('물 준 지 오래된 순', 'Longest since watering', '水やりから長い順'),
+      manual: t('직접 정한 순서', 'My own order', '自分で決めた順'),
+    })[s];
+  const pickSort = async () => {
+    const i = await chooseAsync(
+      PLANT_SORTS.map((s) => (s === sort ? `✓ ${sortLabel(s)}` : sortLabel(s))),
+      t('취소', 'Cancel', 'キャンセル'),
+      t('정렬', 'Sort', '並べ替え'),
+    );
+    if (i >= 0) setSort(PLANT_SORTS[i]);
+  };
   const rename = async () => {
     if (!cat) return;
-    const name = await prompt({
-      title: t('속 이름 바꾸기', 'Rename genus', '属名を変更'),
-      message: t('이 속의 식물 이름도 함께 바뀝니다. 이미 있는 속 이름을 넣으면 두 속이 합쳐집니다.', 'Plant names in this genus change too. Using an existing genus merges the two.', 'この属の植物名も変わります。既存の属名にすると統合されます。'),
-      initial: cat.name,
-    });
-    if (!name || name === cat.name) return;
-    try {
-      const target = await renameGenusCategory(cat, name, cats, plants);
-      await Promise.all([qc.invalidateQueries({ queryKey: ['categories'] }), qc.invalidateQueries({ queryKey: ['plants'] })]);
-      if (target !== cat.id) router.setParams({ key: target });
-    } catch (e) {
-      notify(t('저장하지 못했습니다', 'Could not save', '保存できませんでした'), errorText(e));
-    }
+    const name = await prompt({ title: t('이름 변경', 'Rename', '名前変更'), initial: cat.name, maxLength: 40 });
+    if (name && name !== cat.name) await edit.run(() => renameCategory(cat, name, cats, t));
+  };
+  const reorder = async (next: Plant[]) => {
+    setSort('manual');
+    await edit.run(() => reorderPlants(next.map((p) => p.id)));
+  };
+  const setVisibility = async () => {
+    const i = await chooseAsync([t('공개로 바꾸기', 'Make public', '公開にする'), t('비공개로 바꾸기', 'Make private', '非公開にする')], t('취소', 'Cancel', 'キャンセル'), t(`${chosen.length}개 선택됨`, `${chosen.length} selected`, `${chosen.length}件選択`));
+    if (i < 0) return;
+    if (await edit.run(() => setPlantsPrivate(selected, i === 1))) setSelected([]);
+  };
+  const move = async (to: string | null) => {
+    setMovingPlants(false);
+    if (await edit.run(() => movePlants(selected, to))) setSelected([]);
+  };
+  const remove = async () => {
+    const ok = await confirmAsync(
+      t(`식물 ${chosen.length}개를 삭제할까요?`, `Delete ${chosen.length} plant(s)?`, `植物${chosen.length}件を削除しますか？`),
+      t('사진과 기록이 함께 지워지며 되돌릴 수 없습니다.', 'Their photos and records are deleted for good.', '写真と記録も削除され、元に戻せません。'),
+      t('삭제', 'Delete', '削除'),
+      t('취소', 'Cancel', 'キャンセル'),
+      true,
+    );
+    if (ok && (await edit.run(() => deletePlants(chosen), t('삭제하지 못했습니다', 'Could not delete', '削除できませんでした')))) setSelected([]);
   };
 
+  const ready = !catsQ.isLoading && !plantsQ.isLoading;
+  const missing = ready && id !== 'all' && id !== 'unsorted' && !cat;
+  const canEdit = member === true && ready && !missing;
+
   return (
-    <View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 4 }} testID="collection-title">
-        <Txt weight="bold" size={40} style={{ letterSpacing: -1, lineHeight: 48, flexShrink: 1 }}>
-          {title}
-        </Txt>
-        <Txt size={12} color={C.muted} style={{ marginLeft: 7, marginBottom: 9 }} testID="collection-count">
-          ({inHere.length})
-        </Txt>
-      </View>
-      {cat && (
-        <View style={{ flexDirection: 'row', marginTop: 6 }}>
-          <TextAction label={t('이름 변경', 'Rename', '名前変更')} onPress={rename} testID="collection-rename" />
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <TopBar onEdit={canEdit ? toggleEdit : undefined} editLabel={editing ? 'DONE' : undefined} editTestID="collection-edit" />
+      <Page testID="collection-screen">
+        <MemberGate what={t('내 식물', 'My Plants', 'マイ植物')}>
+          {!ready ? (
+            <Loading />
+          ) : catsQ.error || plantsQ.error ? (
+            <Notice tone="warning">{errorText(catsQ.error ?? plantsQ.error)}</Notice>
+          ) : missing ? (
+            <Notice>{t('이 분류는 더 이상 없습니다.', 'This category no longer exists.', 'この分類はもうありません。')}</Notice>
+          ) : (
+            <View>
+              <View style={styles.titleRow} testID="collection-title">
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <Txt weight="bold" size={40} style={{ letterSpacing: -1, lineHeight: 48, flexShrink: 1 }}>
+                    {title}
+                  </Txt>
+                  <Txt size={12} color={C.muted} style={{ marginLeft: 7, marginBottom: 9 }} testID="collection-count">
+                    ({all.length})
+                  </Txt>
+                </View>
+                {!editing && (
+                  <View style={styles.tools}>
+                    <Pressable onPress={() => setSearching(true)} hitSlop={6} style={styles.tool} accessibilityRole="button" accessibilityLabel={t('검색', 'Search', '検索')} testID="collection-search">
+                      <SearchIcon />
+                    </Pressable>
+                    <Pressable onPress={pickSort} hitSlop={6} style={styles.tool} accessibilityRole="button" accessibilityLabel={`${t('정렬', 'Sort', '並べ替え')}: ${sortLabel(sort)}`} testID="collection-sort">
+                      <SortIcon />
+                    </Pressable>
+                    <Pressable onPress={() => addPlant(cat?.id)} hitSlop={6} style={styles.tool} accessibilityRole="button" accessibilityLabel={cat ? t(`${cat.name}에 식물 추가`, `Add a plant to ${cat.name}`, `${cat.name}に植物を追加`) : t('식물 추가', 'Add plant', '植物を追加')} testID="collection-add">
+                      <Plus />
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+              {editing && cat && (
+                <View style={{ flexDirection: 'row', marginTop: 6 }}>
+                  <TextAction label={t('이름 변경', 'Rename', '名前変更')} onPress={rename} testID="collection-rename" />
+                </View>
+              )}
+              {!editing && !!q && (
+                <Txt size={11} color={C.muted} style={{ marginTop: 6 }} testID="collection-searching">
+                  {t(`"${q}" 검색 결과 ${listed.length}개`, `${listed.length} result(s) for "${q}"`, `「${q}」の検索結果 ${listed.length}件`)}
+                </Txt>
+              )}
+
+              {/* sub-categories (hidden while a search shows every plant below as one list) */}
+              {cat && !q && depthOf(cats, cat.id) < MAX_DEPTH && (editing || kids.length > 0) && (
+                <View style={{ marginTop: 18 }}>
+                  <CategoryRows parentId={cat.id} cats={cats} plants={plants} editing={editing} testID="sub" />
+                </View>
+              )}
+
+              <View style={{ marginTop: 18 }}>
+                {!all.length && !kids.length && (
+                  <Notice>{t('아직 등록한 식물이 없습니다. 제목 옆 ＋를 눌러 식물을 등록해 보세요.', 'No plants yet. Tap ＋ next to the title to add one.', 'まだ植物がありません。タイトル横の＋から登録しましょう。')}</Notice>
+                )}
+                {!!q && !listed.length && (
+                  <Txt size={13} color={C.muted} style={{ paddingVertical: 18 }} testID="collection-no-match">
+                    {t('찾는 식물이 없습니다.', 'No plant matches.', '該当する植物がありません。')}
+                  </Txt>
+                )}
+                {editing && listed.length > 0 && (
+                  <View style={styles.selectAll}>
+                    <Txt size={12} color={C.sub} style={{ flex: 1 }} testID="collection-selected">
+                      {t(`${selected.length}개 선택됨`, `${selected.length} selected`, `${selected.length}件選択`)}
+                    </Txt>
+                    <TextAction
+                      label={selected.length === listed.length ? t('선택 해제', 'Clear', '選択解除') : t('전체 선택', 'Select all', 'すべて選択')}
+                      onPress={() => setSelected(selected.length === listed.length ? [] : listed.map((p) => p.id))}
+                      testID="collection-select-all"
+                    />
+                  </View>
+                )}
+                {listed.length > 0 && <View style={{ borderTopWidth: 1, borderTopColor: C.hair }} />}
+                {editing ? (
+                  <EditPlantList plants={listed} selected={selected} onToggle={toggle} onReorder={reorder} />
+                ) : (
+                  <PlantList plants={listed} locale={locale} t={t} />
+                )}
+                {editing && <View style={{ height: 90 }} />}
+              </View>
+            </View>
+          )}
+        </MemberGate>
+      </Page>
+
+      {editing && (
+        <View style={styles.editBar} testID="collection-edit-bar">
+          <BarButton label={t('분류 이동', 'Move', '分類を移動')} disabled={!selected.length} onPress={() => setMovingPlants(true)} testID="bulk-move" />
+          <BarButton label={t('공개 설정', 'Visibility', '公開設定')} disabled={!selected.length} onPress={setVisibility} testID="bulk-visibility" />
+          <BarButton label={t(`삭제 (${selected.length})`, `Delete (${selected.length})`, `削除 (${selected.length})`)} disabled={!selected.length} danger onPress={remove} testID="bulk-delete" />
         </View>
       )}
-      <View style={{ marginTop: 22 }}>
-        {inHere.length > 0 && <SearchField value={query} onChange={setQuery} placeholder={t('식물 이름, 학명으로 검색', 'Search by plant name or scientific name', '植物名・学名で検索')} testID="collection-search" />}
-        {!inHere.length && (
-          <Notice>{t('아직 등록한 식물이 없습니다. 오른쪽 위 ＋를 눌러 식물을 등록해 보세요.', 'No plants yet. Tap ＋ at the top right to add one.', 'まだ植物がありません。右上の＋から登録しましょう。')}</Notice>
-        )}
-        {inHere.length > 0 && !shown.length && (
-          <Txt size={13} color={C.muted} style={{ paddingVertical: 18 }} testID="collection-no-match">
-            {t('찾는 식물이 없습니다.', 'No plant matches.', '該当する植物がありません。')}
-          </Txt>
-        )}
-        {shown.length > 0 && <View style={{ borderTopWidth: 1, borderTopColor: C.hair }} />}
-        {shown.map((p) => (
-          <ItemRow
-            strong
-            key={p.id}
-            name={p.scientific_name}
-            meta={[p.nickname, p.identification_status === 'verified' ? idStatusLabel('verified', locale) : '', originLabel(p.origin_region, p.origin_place, locale)].filter(Boolean).join(' · ')}
-            badge={p.is_private ? t('비공개', 'PRIVATE', '非公開') : undefined}
-            thumb={resolve(p.photo_paths[0])}
-            onPress={() => router.push(`/plants/${p.id}`)}
-            testID={`plant-row-${p.id}`}
-          />
-        ))}
+      <View style={[styles.searchLayer, { top: BAR_HEIGHT + insets.top }]} pointerEvents="box-none">
+        <SearchPanel
+          open={searching}
+          value={query}
+          onChange={setQuery}
+          onClose={() => {
+            setSearching(false);
+            setQuery('');
+          }}
+          placeholder={t('학명, 식물 이름, 나라로 검색', 'Search by scientific name, plant name or country', '学名・植物名・国で検索')}
+          testID="plant-search"
+        />
       </View>
+      <CategoryPicker
+        visible={movingPlants}
+        title={t(`${selected.length}개를 옮길 분류`, `Move ${selected.length} to`, `${selected.length}件の移動先`)}
+        cats={cats}
+        value={cat?.id ?? null}
+        noneLabel={t('미분류', 'Unsorted', '未分類')}
+        onPick={move}
+        onCreate={edit.create}
+        onClose={() => setMovingPlants(false)}
+        testID="move-plants-sheet"
+      />
     </View>
   );
 }
+
+function PlantList({ plants, locale, t }: { plants: Plant[]; locale: ReturnType<typeof useLocale>['locale']; t: ReturnType<typeof useLocale>['t'] }) {
+  const resolve = useSignedUrls(plants.map((p) => p.photo_paths[0]));
+  return (
+    <View>
+      {plants.map((p) => (
+        <ItemRow
+          strong
+          key={p.id}
+          name={p.scientific_name}
+          meta={[p.nickname, p.identification_status === 'verified' ? idStatusLabel('verified', locale) : '', originLabel(p.origin_region, p.origin_place, locale)].filter(Boolean).join(' · ')}
+          badge={p.is_private ? t('비공개', 'PRIVATE', '非公開') : undefined}
+          thumb={resolve(p.photo_paths[0])}
+          onPress={() => router.push(`/plants/${p.id}`)}
+          testID={`plant-row-${p.id}`}
+        />
+      ))}
+    </View>
+  );
+}
+
+/** EDIT: tap a row to select it, drag ≡ to put it somewhere else (the list then keeps "my own order"). */
+function EditPlantList({ plants, selected, onToggle, onReorder }: { plants: Plant[]; selected: string[]; onToggle: (id: string) => void; onReorder: (next: Plant[]) => void }) {
+  const { t } = useLocale();
+  const resolve = useSignedUrls(plants.map((p) => p.photo_paths[0]));
+  return (
+    <ReorderList
+      items={plants}
+      keyOf={(p) => p.id}
+      rowHeight={PLANT_ROW}
+      onReorder={onReorder}
+      testID="plant-order"
+      renderRow={(p, handle) => {
+        const on = selected.includes(p.id);
+        const thumb = resolve(p.photo_paths[0]);
+        return (
+          <View style={styles.plantRow}>
+            <Pressable onPress={() => onToggle(p.id)} style={styles.plantPick} accessibilityRole="checkbox" accessibilityState={{ checked: on }} testID={`pick-${p.id}`}>
+              <CheckMark on={on} />
+              <View style={[styles.thumb, { pointerEvents: 'none' }]}>{thumb ? <Image source={{ uri: thumb }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Txt size={18} color="#BBB">✿</Txt>}</View>
+              <View style={{ flex: 1 }}>
+                <Txt weight="bold" size={15} numberOfLines={2} style={{ lineHeight: 20 }}>
+                  {p.scientific_name}
+                </Txt>
+                {(!!p.nickname || p.is_private) && (
+                  <Txt size={11} color={C.muted} numberOfLines={1} style={{ marginTop: 2 }}>
+                    {[p.is_private ? t('비공개', 'PRIVATE', '非公開') : '', p.nickname].filter(Boolean).join(' · ')}
+                  </Txt>
+                )}
+              </View>
+            </Pressable>
+            {handle}
+          </View>
+        );
+      }}
+    />
+  );
+}
+
+function BarButton({ label, onPress, disabled, danger, testID }: { label: string; onPress: () => void; disabled?: boolean; danger?: boolean; testID: string }) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} style={[styles.barButton, disabled && { opacity: 0.3 }]} accessibilityRole="button" accessibilityState={{ disabled }} testID={testID}>
+      <Txt size={14} weight="bold" color={danger ? C.danger : C.ink}>
+        {label}
+      </Txt>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  titleRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 },
+  tools: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, marginRight: -8 },
+  tool: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
+  selectAll: { flexDirection: 'row', alignItems: 'center', paddingBottom: 10 },
+  plantRow: { height: PLANT_ROW, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: C.hair, backgroundColor: C.bg },
+  plantPick: { flex: 1, height: '100%', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  thumb: { width: 52, height: 52, backgroundColor: '#E9E9E9', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  editBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.line },
+  barButton: { flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center' },
+  searchLayer: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
+});
