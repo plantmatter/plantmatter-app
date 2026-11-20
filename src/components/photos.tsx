@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated as RNAnimated, FlatList, Pressable, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Extrapolation, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { chooseAsync, notify } from '@/lib/dialogs';
 import { useLocale } from '@/lib/i18n';
@@ -197,62 +198,60 @@ function PhotoTile({ src, cover, slot, start, dragging, tx, ty, onStart, onMove,
 }
 
 /**
- * Detail photos that fill the frame with no grey bars. The frame takes each photo's own shape (between
- * 4:3 landscape and 9:16 portrait; beyond that the photo is trimmed to fill), and while swiping its height
- * follows the finger from one photo's shape to the next.
+ * Swipeable detail photos that fill the frame with no grey: the frame takes each photo's shape (16:9 … 3:4) and
+ * changes height smoothly while swiping. Everything moves on the UI thread (Reanimated): the scroll position drives
+ * the frame and slide heights there, so swiping keeps up with the finger whatever the JS side is doing; React only
+ * hears about it when the page number changes (for the "n/m" counter), and the slides themselves never re-render
+ * then. All photos (five at most) start loading when the page opens.
  */
 export function AdaptivePhotoPager({ uris, flush, testID }: { uris: string[]; flush?: boolean; testID?: string }) {
   const { width } = useWindowDimensions();
   const w = Math.min(width, 720);
   const [ratios, setRatios] = useState<Record<string, number>>({});
   const [index, setIndex] = useState(0);
-  const [x] = useState(() => new RNAnimated.Value(0));
-  if (!uris.length) return null;
-  const heights = uris.map((u) => Math.round(w * (ratios[u] ?? 4 / 3)));
-  const height = heights.length > 1 ? x.interpolate({ inputRange: heights.map((_, i) => i * w), outputRange: heights, extrapolate: 'clamp' }) : heights[0];
-  const onScroll = RNAnimated.event([{ nativeEvent: { contentOffset: { x } } }], {
-    useNativeDriver: false,
-    listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const i = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, w));
-      if (i !== index) setIndex(i);
-    },
+  const x = useSharedValue(0);
+  const shownIndex = useSharedValue(0);
+  const heights = useMemo(() => uris.map((u) => Math.round(w * (ratios[u] ?? 4 / 3))), [uris, ratios, w]);
+  const stops = useMemo(() => heights.map((_, i) => i * w), [heights, w]);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    x.set(e.contentOffset.x);
+    const i = Math.round(e.contentOffset.x / Math.max(1, w));
+    if (i !== shownIndex.get()) {
+      shownIndex.set(i);
+      scheduleOnRN(setIndex, i);
+    }
   });
+  const frame = useAnimatedStyle(() => ({ height: heights.length > 1 ? interpolate(x.get(), stops, heights, Extrapolation.CLAMP) : heights[0] }));
+  const onRatio = useCallback((uri: string, iw: number, ih: number) => {
+    const r = frameRatio(iw, ih);
+    setRatios((prev) => (prev[uri] === r ? prev : { ...prev, [uri]: r }));
+  }, []);
+  if (!uris.length) return null;
   return (
-    <RNAnimated.View style={{ width: w, height, alignSelf: 'center', marginBottom: 18, marginTop: flush ? -GUTTER : 0, backgroundColor: '#E9E9E9', overflow: 'hidden' }} testID={testID}>
-      <RNAnimated.FlatList
-        data={uris}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(u, i) => `${i}:${u}`}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        style={{ flex: 1 }}
-        renderItem={({ item }) => (
-          <RNAnimated.View style={{ width: w, height }}>
-            {item ? (
-              <Image
-                source={{ uri: item }}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-                transition={150}
-                onLoad={(e) => {
-                  const r = frameRatio(e.source.width, e.source.height);
-                  setRatios((prev) => (prev[item] === r ? prev : { ...prev, [item]: r }));
-                }}
-              />
-            ) : null}
-          </RNAnimated.View>
-        )}
-      />
+    <Animated.View style={[{ width: w, alignSelf: 'center', marginBottom: 18, marginTop: flush ? -GUTTER : 0, backgroundColor: '#E9E9E9', overflow: 'hidden' }, frame]} testID={testID}>
+      <Animated.ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16} style={{ flex: 1 }}>
+        {uris.map((u, i) => (
+          <PagerSlide key={`${i}:${u}`} uri={u} width={w} heights={heights} stops={stops} x={x} onRatio={onRatio} />
+        ))}
+      </Animated.ScrollView>
       {uris.length > 1 && (
         <Txt size={11} color={C.sub} style={{ position: 'absolute', right: 12, bottom: 10, backgroundColor: 'rgba(255,255,255,0.85)', paddingHorizontal: 7, paddingVertical: 3 }} testID={testID ? `${testID}-count` : undefined}>
           {`${index + 1}/${uris.length}`}
         </Txt>
       )}
-    </RNAnimated.View>
+    </Animated.View>
   );
 }
+
+/** One page of the pager; its height follows the frame on the UI thread. */
+const PagerSlide = memo(function PagerSlide({ uri, width, heights, stops, x, onRatio }: { uri: string; width: number; heights: number[]; stops: number[]; x: SharedValue<number>; onRatio: (uri: string, w: number, h: number) => void }) {
+  const style = useAnimatedStyle(() => ({ height: heights.length > 1 ? interpolate(x.get(), stops, heights, Extrapolation.CLAMP) : heights[0] }));
+  return (
+    <Animated.View style={[{ width }, style]}>
+      {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={uri} transition={150} onLoad={(e) => onRatio(uri, e.source.width, e.source.height)} /> : null}
+    </Animated.View>
+  );
+});
 
 /** Swipeable photos with an "n/m" counter. */
 export function PhotoPager({ uris, aspect = 4 / 5, flush, testID }: { uris: string[]; aspect?: number; flush?: boolean; testID?: string }) {
