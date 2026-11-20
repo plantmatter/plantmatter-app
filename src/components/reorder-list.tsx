@@ -10,19 +10,32 @@ import { DragHandle } from './icons';
 import { useScrollLock } from './ui';
 
 type Drag = { key: string; from: number; over: number };
+/** The order shown since a drop, kept until the list given by the parent catches up (or the save fails). */
+type Dropped = { before: string; after: string[] };
 
 /**
  * A list whose rows are dragged by their ≡ handle (EDIT mode). Rows have one fixed height and are placed
- * absolutely, so the dragged row keeps its touch while the others make room; `onReorder` gets the new order.
+ * absolutely, so the dragged row keeps its touch while the others make room.
+ *
+ * On release the new order is shown at once — the row settles into the slot where it was dropped and never
+ * goes back first — and `onReorder` saves it. The list keeps showing that order until `items` arrives in it;
+ * if `onReorder` resolves to false (the save failed) the old order comes back.
  */
-export function ReorderList<T>({ items, keyOf, rowHeight, renderRow, onReorder, testID }: { items: T[]; keyOf: (item: T) => string; rowHeight: number; renderRow: (item: T, handle: ReactNode) => ReactNode; onReorder: (next: T[]) => void; testID?: string }) {
+export function ReorderList<T>({ items, keyOf, rowHeight, renderRow, onReorder, testID }: { items: T[]; keyOf: (item: T) => string; rowHeight: number; renderRow: (item: T, handle: ReactNode) => ReactNode; onReorder: (next: T[]) => Promise<boolean> | void; testID?: string }) {
   const lockScroll = useScrollLock();
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [dropped, setDropped] = useState<Dropped | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const dy = useSharedValue(0);
 
+  const itemsKeys = items.map(keyOf).join('|');
+  // The parent caught up (or the list changed in another way): show its order again.
+  if (dropped && itemsKeys !== dropped.before) setDropped(null);
+  const byKey = new Map(items.map((i) => [keyOf(i), i]));
+  const shown = dropped && itemsKeys === dropped.before ? dropped.after.map((k) => byKey.get(k)!).filter(Boolean) : items;
+
   const start = (key: string) => {
-    const from = items.findIndex((i) => keyOf(i) === key);
+    const from = shown.findIndex((i) => keyOf(i) === key);
     if (from < 0) return;
     dy.set(0);
     dragRef.current = { key, from, over: from };
@@ -33,7 +46,7 @@ export function ReorderList<T>({ items, keyOf, rowHeight, renderRow, onReorder, 
     const d = dragRef.current;
     if (!d) return;
     dy.set(y);
-    const over = Math.max(0, Math.min(items.length - 1, Math.round(d.from + y / rowHeight)));
+    const over = Math.max(0, Math.min(shown.length - 1, Math.round(d.from + y / rowHeight)));
     if (over !== d.over) {
       dragRef.current = { ...d, over };
       setDrag(dragRef.current);
@@ -45,13 +58,18 @@ export function ReorderList<T>({ items, keyOf, rowHeight, renderRow, onReorder, 
     dragRef.current = null;
     setDrag(null);
     lockScroll(false);
-    if (d.over !== d.from) onReorder(moveItem(items, d.from, d.over));
+    if (d.over === d.from) return;
+    const next = moveItem(shown, d.from, d.over);
+    setDropped({ before: itemsKeys, after: next.map(keyOf) });
+    Promise.resolve(onReorder(next)).then((ok) => {
+      if (ok === false) setDropped(null);
+    });
   };
 
-  const order = drag ? moveItem(items, drag.from, drag.over) : items;
+  const order = drag ? moveItem(shown, drag.from, drag.over) : shown;
   return (
-    <View style={{ height: items.length * rowHeight }} testID={testID}>
-      {items.map((item, i) => {
+    <View style={{ height: shown.length * rowHeight }} testID={testID}>
+      {shown.map((item, i) => {
         const key = keyOf(item);
         return (
           <Row key={key} slot={order.indexOf(item)} start={i} rowHeight={rowHeight} dragging={drag?.key === key} dy={dy} onStart={() => start(key)} onMove={move} onEnd={end} render={(handle) => renderRow(item, handle)} testID={testID ? `${testID}-handle-${key}` : undefined} />
@@ -73,10 +91,12 @@ function Row({ slot, start, rowHeight, dragging, dy, onStart, onMove, onEnd, ren
     onUpdate: (e) => latest.current.onMove(e.translationY),
     onFinalize: () => latest.current.onEnd(),
   });
+  // Dragged: follows the finger. Otherwise: slides to its slot — for the row just dropped, a short settle from
+  // where the finger left it into the new slot.
   const style = useAnimatedStyle(() =>
     dragging
       ? { zIndex: 10, transform: [{ translateY: start * rowHeight + dy.get() }], backgroundColor: C.white, opacity: 0.96 }
-      : { zIndex: 0, transform: [{ translateY: withTiming(slot * rowHeight, { duration: 160 }) }], backgroundColor: 'transparent', opacity: 1 },
+      : { zIndex: 0, transform: [{ translateY: withTiming(slot * rowHeight, { duration: 140 }) }], backgroundColor: 'transparent', opacity: 1 },
   );
   const handle = (
     <GestureDetector gesture={pan}>

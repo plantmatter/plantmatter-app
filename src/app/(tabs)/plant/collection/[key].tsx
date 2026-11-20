@@ -22,7 +22,7 @@ import { deletePlants, movePlants, renameCategory, reorderPlants, setPlantsPriva
 import { chooseAsync, confirmAsync } from '@/lib/dialogs';
 import { placeShort } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
-import { idStatusLabel, noCategoryLabel } from '@/lib/labels';
+import { noCategoryLabel } from '@/lib/labels';
 import { addPlant } from '@/lib/nav';
 import { useSignedUrls } from '@/lib/photos';
 import { matchesPlant } from '@/lib/search';
@@ -128,9 +128,12 @@ export default function CollectionScreen() {
     const name = await prompt({ title: t('이름 변경', 'Rename', '名前変更'), initial: cat.name, maxLength: 40 });
     if (name && name !== cat.name) await edit.run(() => renameCategory(cat, name, cats, t));
   };
+  // The list keeps the dropped order on screen while this saves; "직접 정한 순서" is switched on once the
+  // saved order is back, so the rows never jump in between.
   const reorder = async (next: Plant[]) => {
-    setSort('manual');
-    await edit.run(() => reorderPlants(next.map((p) => p.id)));
+    const ok = await edit.run(() => reorderPlants(next));
+    if (ok) setSort('manual');
+    return ok;
   };
   const setVisibility = async () => {
     const i = await chooseAsync([t('공개로 바꾸기', 'Make public', '公開にする'), t('비공개로 바꾸기', 'Make private', '非公開にする')], t('취소', 'Cancel', 'キャンセル'), t(`${chosen.length}개 선택됨`, `${chosen.length} selected`, `${chosen.length}件選択`));
@@ -289,7 +292,7 @@ function PlantList({ plants, locale, t, tagOf }: { plants: Plant[]; locale: Retu
           strong
           key={p.id}
           name={p.scientific_name}
-          meta={[p.nickname, p.identification_status === 'verified' ? idStatusLabel('verified', locale) : '', placeShort(p.origin_region, p.origin_place, locale)].filter(Boolean).join(' · ')}
+          meta={[p.nickname, placeShort(p.origin_region, p.origin_place, locale)].filter(Boolean).join(' · ')}
           badge={p.is_private ? t('비공개', 'PRIVATE', '非公開') : undefined}
           thumb={resolve(p.photo_paths[0])}
           tag={tagOf(p)}
@@ -302,7 +305,7 @@ function PlantList({ plants, locale, t, tagOf }: { plants: Plant[]; locale: Retu
 }
 
 /** EDIT: tap a row to select it, drag ≡ to put it somewhere else (the list then keeps "my own order"). */
-function EditPlantList({ plants, selected, onToggle, onReorder }: { plants: Plant[]; selected: string[]; onToggle: (id: string) => void; onReorder: (next: Plant[]) => void }) {
+function EditPlantList({ plants, selected, onToggle, onReorder }: { plants: Plant[]; selected: string[]; onToggle: (id: string) => void; onReorder: (next: Plant[]) => Promise<boolean> }) {
   const { t } = useLocale();
   const resolve = useSignedUrls(plants.map((p) => p.photo_paths[0]));
   return (

@@ -100,7 +100,7 @@ export function CategoryRows({ parentId, cats, plants, editing, big = false, tes
         items={kids}
         keyOf={(c) => c.id}
         rowHeight={EDIT_ROW}
-        onReorder={(next) => edit.run(() => reorderCategories(next.map((c) => c.id)), fail)}
+        onReorder={(next) => edit.run(() => reorderCategories(next), fail)}
         testID={`${testID}-order`}
         renderRow={(c, handle) => {
           const n = plantsUnder(plants, cats, c.id).length;

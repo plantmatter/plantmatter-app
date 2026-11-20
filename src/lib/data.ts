@@ -135,14 +135,18 @@ export async function moveCategory(cat: Category, newParent: string | null, cats
   failSchema(error);
 }
 
-/** Save a new order of sibling categories. */
-export async function reorderCategories(ids: string[]) {
+/** New positions for a reordered list: 10, 20, 30 … (only rows whose position changes are returned). */
+export const orderChanges = <R extends { id: string; sort_order: number }>(list: R[]) =>
+  list.map((r, i) => ({ id: r.id, sort_order: (i + 1) * 10 })).filter((u, i) => list[i].sort_order !== u.sort_order);
+
+/** Save the rows whose position changed, all at once. */
+async function saveOrder(table: 'plants' | 'plant_categories', changes: { id: string; sort_order: number }[]) {
   const db = need();
-  for (let i = 0; i < ids.length; i++) {
-    const { error } = await db.from('plant_categories').update({ sort_order: (i + 1) * 10 }).eq('id', ids[i]);
-    failSchema(error);
-  }
+  const results = await Promise.all(changes.map((c) => db.from(table).update({ sort_order: c.sort_order }).eq('id', c.id)));
+  for (const { error } of results) failSchema(error);
 }
+/** Save a new order of sibling categories. */
+export const reorderCategories = (next: Category[]) => saveOrder('plant_categories', orderChanges(next));
 
 /**
  * Delete a category. Nothing inside is lost: its plants and its sub-categories move one level up
@@ -209,14 +213,7 @@ export async function setPlantsPrivate(ids: string[], value: boolean) {
   fail(error);
 }
 /** EDIT: save the dragged order ("직접 정한 순서") of the plants on the page. */
-export async function reorderPlants(ids: string[]) {
-  const db = need();
-  for (let i = 0; i < ids.length; i++) {
-    const { error } = await db.from('plants').update({ sort_order: (i + 1) * 10 }).eq('id', ids[i]);
-    failSchema(error);
-  }
-}
-/** "주기 리셋": record today's watering. */
+export const reorderPlants = (next: Plant[]) => saveOrder('plants', orderChanges(next));
 // ---------- watering (v0.1.7) ----------
 const PAGE = 1000;
 /** Watering days of the last ~13 months for all of the user's plants (enough for the averages), newest first. */
