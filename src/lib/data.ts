@@ -110,7 +110,7 @@ const exists = (t: T, name: string) => new Error(t(`같은 자리에 "${name}"�
 export async function createCategory(uid: string, rawName: string, parentId: string | null, cats: Category[], t: T) {
   const name = cleanName(rawName);
   if (!name) throw new Error(t('이름을 입력해 주세요', 'Enter a name', '名前を入力してください'));
-  if (parentId && depthOf(cats, parentId) >= MAX_DEPTH) throw new Error(t('분류는 3단계까지 만들 수 있습니다', 'Categories go three levels deep at most', '分類は3段階までです'));
+  if (parentId && depthOf(cats, parentId) >= MAX_DEPTH) throw new Error(t('카테고리는 3단계까지 만들 수 있습니다', 'Categories go three levels deep at most', 'カテゴリは3段階までです'));
   if (nameTaken(cats, parentId, name)) throw exists(t, name);
   const sort = childrenOf(cats, parentId).reduce((m, c) => Math.max(m, c.sort_order), 0) + 10;
   const { data, error } = await need().from('plant_categories').insert({ owner_id: uid, name, parent_id: parentId, sort_order: sort }).select('id').single();
@@ -128,7 +128,7 @@ export async function renameCategory(cat: Category, rawName: string, cats: Categ
 
 /** Put a category (with what is under it) under another one, or at the top (null). */
 export async function moveCategory(cat: Category, newParent: string | null, cats: Category[], t: T) {
-  if (!canMoveUnder(cats, cat.id, newParent)) throw new Error(t('그 자리로는 옮길 수 없습니다 (분류는 3단계까지)', 'It cannot go there (three levels at most)', 'そこには移動できません（3段階まで）'));
+  if (!canMoveUnder(cats, cat.id, newParent)) throw new Error(t('그 자리로는 옮길 수 없습니다 (카테고리는 3단계까지)', 'It cannot go there (three levels at most)', 'そこには移動できません（3段階まで）'));
   if (nameTaken(cats, newParent, cat.name, cat.id)) throw exists(t, cat.name);
   const sort = childrenOf(cats, newParent).reduce((m, c) => Math.max(m, c.sort_order), 0) + 10;
   const { error } = await need().from('plant_categories').update({ parent_id: newParent, sort_order: sort }).eq('id', cat.id);

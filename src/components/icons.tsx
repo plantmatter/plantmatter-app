@@ -51,10 +51,10 @@ export const SearchIcon = (p: P) => (
     <Path d="m15.5 15.5 5 5" />
   </Line>
 );
-/** ↓↑ sort. */
+/** ↓↑ sort, drawn in the same 15 × 15 square as ＋ (two arrows set apart, not a tall narrow mark). */
 export const SortIcon = (p: P) => (
   <Line {...p}>
-    <Path d="M8.5 4.5v15M5 16l3.5 3.5L12 16M15.5 19.5v-15M12 8l3.5-3.5L19 8" />
+    <Path d="M8 4.5v15M4.5 16 8 19.5l3.5-3.5M16 19.5v-15M12.5 8 16 4.5 19.5 8" />
   </Line>
 );
 /** ⋯ more actions. */

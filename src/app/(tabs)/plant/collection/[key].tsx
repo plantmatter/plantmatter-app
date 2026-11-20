@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryPicker } from '@/components/category-picker';
 import { CategoryRows } from '@/components/category-rows';
+import { EditGuard } from '@/components/edit-guard';
 import { MemberGate } from '@/components/gate';
 import { CheckMark, Plus, SearchIcon, SortIcon } from '@/components/icons';
 import { usePrompt } from '@/components/prompt';
@@ -14,14 +15,14 @@ import { ReorderList } from '@/components/reorder-list';
 import { ItemRow, TextAction } from '@/components/rows';
 import { SearchPanel } from '@/components/search-panel';
 import { TopBar } from '@/components/top-bar';
-import { Txt } from '@/components/txt';
+import { baselineFromBottom, Txt } from '@/components/txt';
 import { Loading, Notice, Page } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { deletePlants, movePlants, renameCategory, reorderPlants, setPlantsPrivate, useCategories, usePlants } from '@/lib/data';
 import { chooseAsync, confirmAsync } from '@/lib/dialogs';
 import { originLabel } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
-import { idStatusLabel } from '@/lib/labels';
+import { idStatusLabel, noCategoryLabel } from '@/lib/labels';
 import { addPlant } from '@/lib/nav';
 import { useSignedUrls } from '@/lib/photos';
 import { matchesPlant } from '@/lib/search';
@@ -33,6 +34,15 @@ import { useCategoryEdit } from '@/lib/use-categories-edit';
 
 const SORT_KEY = 'pm-plant-sort';
 const PLANT_ROW = 80;
+const TITLE_SIZE = 40;
+const TITLE_LINE = 48;
+// Search · sort · ＋ next to the title: 20 px icons whose lines still look 1.5 px like every other icon,
+// 36 apart, each still easy to press (44 × 44 with the slop).
+const TOOL_ICON = 20;
+const TOOL_STROKE = (1.5 * 24) / TOOL_ICON;
+const TOOL_SLOP = { left: 4, right: 4, top: 0, bottom: 4 };
+/** Empty space under the drawing inside a tool icon whose lowest point is at `bottom` on the 24 grid. */
+const toolGap = (bottom: number) => ((24 - bottom - TOOL_STROKE / 2) * TOOL_ICON) / 24;
 
 /** The list order chosen with ↓↑, remembered on this phone for every My Plants page. */
 function useSortChoice() {
@@ -77,7 +87,9 @@ export default function CollectionScreen() {
   const listed = sortPlants(q ? all.filter((p) => matchesPlant(p, q)) : direct, sort);
   const kids = cat ? childrenOf(cats, cat.id) : [];
   const chosen = plants.filter((p) => selected.includes(p.id));
-  const title = id === 'all' ? 'All' : id === 'unsorted' ? t('미분류', 'Unsorted', '未分類') : (cat?.name ?? '');
+  const title = id === 'all' ? 'All' : id === 'unsorted' ? noCategoryLabel(t) : (cat?.name ?? '');
+  // The count and the icons sit on the title's baseline.
+  const baseline = baselineFromBottom(title, TITLE_SIZE, TITLE_LINE);
 
   const toggleEdit = () => {
     setSearching(false);
@@ -137,7 +149,8 @@ export default function CollectionScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <TopBar onEdit={canEdit ? toggleEdit : undefined} editLabel={editing ? 'DONE' : undefined} editTestID="collection-edit" />
+      <EditGuard editing={editing} onDone={toggleEdit} />
+      <TopBar left={editing ? 'none' : 'back'} onEdit={canEdit ? toggleEdit : undefined} editLabel={editing ? 'DONE' : undefined} editTestID="collection-edit" />
       <Page testID="collection-screen">
         <MemberGate what={t('내 식물', 'My Plants', 'マイ植物')}>
           {!ready ? (
@@ -145,28 +158,28 @@ export default function CollectionScreen() {
           ) : catsQ.error || plantsQ.error ? (
             <Notice tone="warning">{errorText(catsQ.error ?? plantsQ.error)}</Notice>
           ) : missing ? (
-            <Notice>{t('이 분류는 더 이상 없습니다.', 'This category no longer exists.', 'この分類はもうありません。')}</Notice>
+            <Notice>{t('이 카테고리는 더 이상 없습니다.', 'This category no longer exists.', 'このカテゴリはもうありません。')}</Notice>
           ) : (
             <View>
               <View style={styles.titleRow} testID="collection-title">
                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <Txt weight="bold" size={40} style={{ letterSpacing: -1, lineHeight: 48, flexShrink: 1 }}>
+                  <Txt weight="bold" size={TITLE_SIZE} style={{ letterSpacing: -1, lineHeight: TITLE_LINE, flexShrink: 1 }}>
                     {title}
                   </Txt>
-                  <Txt size={12} color={C.muted} style={{ marginLeft: 7, marginBottom: 9 }} testID="collection-count">
+                  <Txt size={12} color={C.muted} style={{ marginLeft: 7, marginBottom: baseline - baselineFromBottom('(0)', 12) }} testID="collection-count">
                     ({all.length})
                   </Txt>
                 </View>
                 {!editing && (
                   <View style={styles.tools}>
-                    <Pressable onPress={() => setSearching(true)} hitSlop={6} style={styles.tool} accessibilityRole="button" accessibilityLabel={t('검색', 'Search', '検索')} testID="collection-search">
-                      <SearchIcon />
+                    <Pressable onPress={() => setSearching(true)} hitSlop={TOOL_SLOP} style={[styles.tool, { paddingBottom: baseline - toolGap(20.5) }]} accessibilityRole="button" accessibilityLabel={t('검색', 'Search', '検索')} testID="collection-search">
+                      <SearchIcon size={TOOL_ICON} weight={TOOL_STROKE} />
                     </Pressable>
-                    <Pressable onPress={pickSort} hitSlop={6} style={styles.tool} accessibilityRole="button" accessibilityLabel={`${t('정렬', 'Sort', '並べ替え')}: ${sortLabel(sort)}`} testID="collection-sort">
-                      <SortIcon />
+                    <Pressable onPress={pickSort} hitSlop={TOOL_SLOP} style={[styles.tool, { paddingBottom: baseline - toolGap(19.5) }]} accessibilityRole="button" accessibilityLabel={`${t('정렬', 'Sort', '並べ替え')}: ${sortLabel(sort)}`} testID="collection-sort">
+                      <SortIcon size={TOOL_ICON} weight={TOOL_STROKE} />
                     </Pressable>
-                    <Pressable onPress={() => addPlant(cat?.id)} hitSlop={6} style={styles.tool} accessibilityRole="button" accessibilityLabel={cat ? t(`${cat.name}에 식물 추가`, `Add a plant to ${cat.name}`, `${cat.name}に植物を追加`) : t('식물 추가', 'Add plant', '植物を追加')} testID="collection-add">
-                      <Plus />
+                    <Pressable onPress={() => addPlant(cat?.id)} hitSlop={TOOL_SLOP} style={[styles.tool, { paddingBottom: baseline - toolGap(19.5) }]} accessibilityRole="button" accessibilityLabel={cat ? t(`${cat.name}에 식물 추가`, `Add a plant to ${cat.name}`, `${cat.name}に植物を追加`) : t('식물 추가', 'Add plant', '植物を追加')} testID="collection-add">
+                      <Plus size={TOOL_ICON} weight={TOOL_STROKE} />
                     </Pressable>
                   </View>
                 )}
@@ -225,7 +238,7 @@ export default function CollectionScreen() {
 
       {editing && (
         <View style={styles.editBar} testID="collection-edit-bar">
-          <BarButton label={t('분류 이동', 'Move', '分類を移動')} disabled={!selected.length} onPress={() => setMovingPlants(true)} testID="bulk-move" />
+          <BarButton label={t('카테고리 이동', 'Move', 'カテゴリを移動')} disabled={!selected.length} onPress={() => setMovingPlants(true)} testID="bulk-move" />
           <BarButton label={t('공개 설정', 'Visibility', '公開設定')} disabled={!selected.length} onPress={setVisibility} testID="bulk-visibility" />
           <BarButton label={t(`삭제 (${selected.length})`, `Delete (${selected.length})`, `削除 (${selected.length})`)} disabled={!selected.length} danger onPress={remove} testID="bulk-delete" />
         </View>
@@ -245,10 +258,10 @@ export default function CollectionScreen() {
       </View>
       <CategoryPicker
         visible={movingPlants}
-        title={t(`${selected.length}개를 옮길 분류`, `Move ${selected.length} to`, `${selected.length}件の移動先`)}
+        title={t(`${selected.length}개를 옮길 카테고리`, `Move ${selected.length} to`, `${selected.length}件の移動先`)}
         cats={cats}
         value={cat?.id ?? null}
-        noneLabel={t('미분류', 'Unsorted', '未分類')}
+        noneLabel={noCategoryLabel(t)}
         onPick={move}
         onCreate={edit.create}
         onClose={() => setMovingPlants(false)}
@@ -328,8 +341,8 @@ function BarButton({ label, onPress, disabled, danger, testID }: { label: string
 
 const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 },
-  tools: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, marginRight: -8 },
-  tool: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
+  tools: { flexDirection: 'row', alignItems: 'flex-end', marginRight: -8 },
+  tool: { width: 36, height: 44, alignItems: 'center', justifyContent: 'flex-end' },
   selectAll: { flexDirection: 'row', alignItems: 'center', paddingBottom: 10 },
   plantRow: { height: PLANT_ROW, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: C.hair, backgroundColor: C.bg },
   plantPick: { flex: 1, height: '100%', flexDirection: 'row', alignItems: 'center', gap: 12 },

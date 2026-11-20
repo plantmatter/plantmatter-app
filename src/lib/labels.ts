@@ -1,6 +1,9 @@
 import { tr, type Locale } from './locale';
 import type { IdStatus, ShopKind } from './types';
 
+/** The plants without a category (My Plants row, page title, picker choice). */
+export const noCategoryLabel = (t: (ko: string, en: string, ja: string) => string) => t('카테고리 없음', 'Unsorted', 'カテゴリなし');
+
 export const ID_STATUSES: IdStatus[] = ['unidentified', 'proposed', 'verified'];
 export const idStatusLabel = (s: IdStatus, l: Locale) =>
   s === 'verified' ? tr(l, '동정 완료', 'Identified', '同定済み') : s === 'proposed' ? tr(l, '동정 중', 'Being identified', '同定中') : tr(l, '미동정', 'Unidentified', '未同定');

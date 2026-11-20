@@ -29,6 +29,16 @@ export function fontFor(text: string, weight: Weight = 'light', italic = false):
   return { fontFamily: weight === 'light' ? F.latinLight : weight === 'bold' ? F.latinBold : F.latinBlack, fontStyle: italic ? 'italic' : 'normal' };
 }
 
+/**
+ * Distance from the bottom of a one-line text box to the letters' baseline, from each font's ascent / descent
+ * (Figtree 0.95 / 0.25 em, Noto Sans KR 1.16 / 0.288 em, Japanese system font about 0.88 / 0.12 em).
+ * Used to sit icons and small counts on the same line as a big title.
+ */
+export function baselineFromBottom(text: string, size: number, lineHeight = size * 1.2) {
+  const [a, d] = HANGUL.test(text) ? [1.16, 0.288] : KANA_HAN.test(text) ? [0.88, 0.12] : [0.95, 0.25];
+  return (lineHeight - (a + d) * size) / 2 + d * size;
+}
+
 export function Txt({ weight = 'light', italic = false, size, color, style, children, ...rest }: Props) {
   const font = fontFor(textOf(children), weight, italic);
   return (

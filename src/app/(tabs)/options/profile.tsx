@@ -49,7 +49,7 @@ export default function ProfileScreen() {
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 20 }}>
             <Stat n={plants.length} label={t('내 식물', 'My plants', 'マイ植物')} />
             <Stat n={finds.length} label={t('관찰 기록', 'Observations', '観察記録')} />
-            <Stat n={cats.length} label={t('분류', 'Categories', '分類')} />
+            <Stat n={cats.length} label={t('카테고리', 'Categories', 'カテゴリ')} />
           </View>
           <View style={{ marginTop: 20 }}>
             <InfoRow label={t('공개 범위', 'Visibility', '公開範囲')} value={t('이번 버전은 내 기록을 나만 봅니다', 'Only you see your records in this version', 'このバージョンでは自分だけが見られます')} />

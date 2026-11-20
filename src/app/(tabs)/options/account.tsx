@@ -28,7 +28,7 @@ export default function AccountScreen() {
     if (!supabase || !user) return;
     const ok = await confirmAsync(
       t('계정을 삭제할까요?', 'Delete your account?', 'アカウントを削除しますか？'),
-      t('내 식물, 관찰 기록, 분류, 사진과 plantmatter.kr의 회원 정보(이름·연락처·배송지)가 모두 영구 삭제되며 되돌릴 수 없습니다.', 'Your plants, observations, categories, photos and your plantmatter.kr member details (name, phone, address) are deleted permanently. This cannot be undone.', '植物・観察記録・分類・写真と、plantmatter.kr の会員情報（名前・電話・住所）がすべて完全に削除され、元に戻せません。'),
+      t('내 식물, 관찰 기록, 카테고리, 사진과 plantmatter.kr의 회원 정보(이름·연락처·배송지)가 모두 영구 삭제되며 되돌릴 수 없습니다.', 'Your plants, observations, categories, photos and your plantmatter.kr member details (name, phone, address) are deleted permanently. This cannot be undone.', '植物・観察記録・カテゴリ・写真と、plantmatter.kr の会員情報（名前・電話・住所）がすべて完全に削除され、元に戻せません。'),
       t('삭제', 'Delete', '削除'),
       t('취소', 'Cancel', 'キャンセル'),
       true,

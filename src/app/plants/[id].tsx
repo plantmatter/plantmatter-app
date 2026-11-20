@@ -15,7 +15,7 @@ import { confirmAsync, notify } from '@/lib/dialogs';
 import { dayLabel, daysSince, todayStr } from '@/lib/format';
 import { originLabel } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
-import { idStatusLabel } from '@/lib/labels';
+import { idStatusLabel, noCategoryLabel } from '@/lib/labels';
 import { useSignedUrls } from '@/lib/photos';
 import { errorText } from '@/lib/supabase';
 import { C } from '@/lib/theme';
@@ -147,9 +147,9 @@ function PlantDetail({ id }: { id: string }) {
       {more && (
         <View testID="plant-more-section">
           <Txt size={10} color={C.muted} style={{ letterSpacing: 1.2, marginBottom: 6 }}>
-            {['MY PLANTS', ...(pathLabel(cats, p.category_id) ? pathLabel(cats, p.category_id).split(' › ') : [t('미분류', 'Unsorted', '未分類')])].join(' / ')}
+            {['MY PLANTS', ...(pathLabel(cats, p.category_id) ? pathLabel(cats, p.category_id).split(' › ') : [noCategoryLabel(t)])].join(' / ')}
           </Txt>
-          <InfoRow label={t('분류', 'Category', '分類')} value={pathLabel(cats, p.category_id) || t('미분류', 'Unsorted', '未分類')} testID="plant-info-category" />
+          <InfoRow label={t('카테고리', 'Category', 'カテゴリ')} value={pathLabel(cats, p.category_id) || noCategoryLabel(t)} testID="plant-info-category" />
           <InfoRow label={t('속', 'Genus', '属')} value={p.genus ?? ''} testID="plant-info-genus" />
           <InfoRow label={t('별칭', 'Nickname', '愛称')} value={p.nickname} testID="plant-info-nickname" />
           <InfoRow label={t('원산지', 'Origin', '原産地')} value={originLabel(p.origin_region, p.origin_place, locale)} testID="plant-info-origin" />

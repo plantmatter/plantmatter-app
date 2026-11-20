@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { CategoryRows } from '@/components/category-rows';
+import { EditGuard } from '@/components/edit-guard';
 import { MemberGate } from '@/components/gate';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
@@ -9,6 +10,7 @@ import { AllTotal, BigRow, Loading, Notice, Page } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { unsortedPlants, useCategories, usePlants } from '@/lib/data';
 import { useLocale } from '@/lib/i18n';
+import { noCategoryLabel } from '@/lib/labels';
 import { addPlant, openCollection } from '@/lib/nav';
 import { errorText } from '@/lib/supabase';
 import { C } from '@/lib/theme';
@@ -19,7 +21,9 @@ export default function MyPlants() {
   const [editing, setEditing] = useState(false);
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <EditGuard editing={editing} onDone={() => setEditing(false)} />
       <TopBar
+        left={editing ? 'none' : 'back'}
         onAdd={editing ? undefined : () => addPlant()}
         addLabel={t('식물 추가', 'Add plant', '植物を追加')}
         onEdit={member ? () => setEditing(!editing) : undefined}
@@ -54,7 +58,7 @@ function Collections({ editing }: { editing: boolean }) {
     return (
       <View>
         <Txt size={12} color={C.sub} style={{ lineHeight: 18, marginBottom: 10 }} testID="mine-edit-hint">
-          {t('≡를 끌어 순서를 바꾸고, ⋯를 눌러 이름 변경 · 이동 · 삭제를 합니다. 분류를 지워도 식물은 지워지지 않습니다.', 'Drag ≡ to reorder; tap ⋯ to rename, move or delete. Deleting a category never deletes plants.', '≡をドラッグして並べ替え、⋯で名前変更・移動・削除。分類を削除しても植物は消えません。')}
+          {t('≡를 끌어 순서를 바꾸고, ⋯를 눌러 이름 변경 · 이동 · 삭제를 합니다. 카테고리를 지워도 식물은 지워지지 않습니다.', 'Drag ≡ to reorder; tap ⋯ to rename, move or delete. Deleting a category never deletes plants.', '≡をドラッグして並べ替え、⋯で名前変更・移動・削除。カテゴリを削除しても植物は消えません。')}
         </Txt>
         <CategoryRows parentId={null} cats={cats} plants={plants} editing big />
       </View>
@@ -63,7 +67,7 @@ function Collections({ editing }: { editing: boolean }) {
     <View>
       <BigRow title="All" count={plants.length} empty={!plants.length} onPress={() => openCollection('all')} testID="cat-all" />
       <CategoryRows parentId={null} cats={cats} plants={plants} editing={false} big />
-      {!!unsorted.length && <BigRow title={t('미분류', 'Unsorted', '未分類')} count={unsorted.length} onPress={() => openCollection('unsorted')} testID="cat-unsorted" />}
+      {!!unsorted.length && <BigRow title={noCategoryLabel(t)} count={unsorted.length} onPress={() => openCollection('unsorted')} testID="cat-unsorted" />}
       <AllTotal n={plants.length} />
     </View>
   );

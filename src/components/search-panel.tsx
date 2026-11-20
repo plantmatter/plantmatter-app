@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, TextInput, View, type TextInputInstance } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, TextInput, View, type TextInputInstance } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { useLocale } from '@/lib/i18n';
 import { C } from '@/lib/theme';
@@ -8,9 +10,16 @@ import { SearchIcon } from './icons';
 import { fontFor, Txt } from './txt';
 
 // The plantmatter.kr search motion: the panel comes down in 0.75 s on (.22, 1, .36, 1) and goes up in 0.45 s on
-// (.55, 0, .45, 1); its contents fade in 0.22 s later; the page behind dims to 18 % ink.
+// (.55, 0, .45, 1); its contents fade in from 0.22 s; the page behind dims to 18 % ink.
+// Everything runs on the UI thread (Reanimated), so the keyboard coming up or the list filtering never makes
+// the motion stutter, and the panel, its contents and the dim all come to rest at the same moment.
 const OPEN = Easing.bezier(0.22, 1, 0.36, 1);
 const CLOSE = Easing.bezier(0.55, 0, 0.45, 1);
+const OPEN_MS = 750;
+const CLOSE_MS = 450;
+const INNER_DELAY = 220;
+/** The keyboard is called once the panel is nearly down (about 97 % of the way). */
+const KEYBOARD_AT = 520;
 const PANEL = 104;
 
 /**
@@ -20,42 +29,52 @@ const PANEL = 104;
 export function SearchPanel({ open, value, onChange, onClose, placeholder, testID }: { open: boolean; value: string; onChange: (v: string) => void; onClose: () => void; placeholder: string; testID?: string }) {
   const { t } = useLocale();
   const [shown, setShown] = useState(open);
-  const [y] = useState(() => new Animated.Value(-PANEL));
-  const [inner] = useState(() => new Animated.Value(0));
-  const [dim] = useState(() => new Animated.Value(0));
   const input = useRef<TextInputInstance>(null);
+  const wasOpen = useRef(false);
+  const y = useSharedValue(-PANEL);
+  const inner = useSharedValue(0);
+  const dim = useSharedValue(0);
   if (open && !shown) setShown(true);
 
   useEffect(() => {
     if (open) {
-      inner.setValue(0);
-      Animated.parallel([
-        Animated.timing(y, { toValue: 0, duration: 750, easing: OPEN, useNativeDriver: false }),
-        Animated.timing(inner, { toValue: 1, duration: 500, delay: 220, easing: OPEN, useNativeDriver: false }),
-      ]).start();
-      const id = setTimeout(() => input.current?.focus(), 260);
+      wasOpen.current = true;
+      inner.set(0);
+      y.set(withTiming(0, { duration: OPEN_MS, easing: OPEN }));
+      inner.set(withDelay(INNER_DELAY, withTiming(1, { duration: OPEN_MS - INNER_DELAY, easing: OPEN })));
+      const id = setTimeout(() => input.current?.focus(), KEYBOARD_AT);
       return () => clearTimeout(id);
     }
-    Animated.parallel([
-      Animated.timing(y, { toValue: -PANEL, duration: 450, easing: CLOSE, useNativeDriver: false }),
-      Animated.timing(inner, { toValue: 0, duration: 180, useNativeDriver: false }),
-      Animated.timing(dim, { toValue: 0, duration: 450, easing: CLOSE, useNativeDriver: false }),
-    ]).start(({ finished }) => finished && setShown(false));
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    Keyboard.dismiss();
+    inner.set(withTiming(0, { duration: 180 }));
+    dim.set(withTiming(0, { duration: CLOSE_MS, easing: CLOSE }));
+    y.set(
+      withTiming(-PANEL, { duration: CLOSE_MS, easing: CLOSE }, (finished) => {
+        if (finished) scheduleOnRN(setShown, false);
+      }),
+    );
   }, [open, y, inner, dim]);
 
+  // Dim while the box is empty; clear it as soon as something is typed. Opening, it settles with the panel.
   useEffect(() => {
     if (!open) return;
-    Animated.timing(dim, { toValue: value ? 0 : 1, duration: value ? 250 : 750, easing: OPEN, useNativeDriver: false }).start();
+    dim.set(withTiming(value ? 0 : 1, { duration: value ? 250 : OPEN_MS, easing: OPEN }));
   }, [open, value, dim]);
+
+  const panelStyle = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() }] }));
+  const innerStyle = useAnimatedStyle(() => ({ opacity: inner.get(), transform: [{ translateY: (1 - inner.get()) * -6 }] }));
+  const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }));
 
   if (!shown) return null;
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID={testID}>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(23,23,23,0.18)', opacity: dim }]} pointerEvents={value ? 'none' : 'auto'}>
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'box-none' }]} testID={testID}>
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(23,23,23,0.18)', pointerEvents: value ? 'none' : 'auto' }, dimStyle]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('검색 닫기', 'Close search', '検索を閉じる')} />
       </Animated.View>
-      <Animated.View style={[styles.panel, { transform: [{ translateY: y }] }]}>
-        <Animated.View style={{ opacity: inner, transform: [{ translateY: inner.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }) }] }}>
+      <Animated.View style={[styles.panel, panelStyle]}>
+        <Animated.View style={innerStyle}>
           <View style={styles.row}>
             <TextInput
               ref={input}

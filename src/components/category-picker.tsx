@@ -10,21 +10,10 @@ import { Plus } from "./icons";
 import { Sheet } from "./sheet";
 import { fontFor, Txt } from "./txt";
 
-/** "대분류" / "중분류" / "소분류" for a depth of 1 / 2 / 3. */
-export const levelName = (
-  depth: number,
-  t: (ko: string, en: string, ja: string) => string,
-) =>
-  depth <= 1
-    ? t("대분류", "category", "大分類")
-    : depth === 2
-      ? t("중분류", "sub-category", "中分類")
-      : t("소분류", "sub-sub-category", "小分類");
-
 /**
  * The whole category tree, indented, in a bottom sheet. Tapping a name picks it (any level). With
  * `onCreate`, each category that can still hold a level has a small ＋ to make one inside it, and
- * "＋ 새 대분류" sits at the bottom; the new category is picked straight away. The name is typed in the sheet itself
+ * "＋ 새 카테고리 생성" sits at the bottom; the new category is picked straight away. The name is typed in the sheet itself
  * (a second modal on top of a sheet does not open on iOS).
  * `blocked(id)` greys out places that cannot be chosen (e.g. moving a category into itself).
  */
@@ -93,9 +82,9 @@ export function CategoryPicker({
           onChangeText={setDraft}
           onSubmitEditing={create}
           placeholder={t(
-            `새 ${levelName(depth, t)} 이름 (예: ${placeholder})`,
-            `New ${levelName(depth, t)} (e.g. ${placeholder})`,
-            `新しい${levelName(depth, t)}（例：${placeholder}）`,
+            `새 카테고리 이름 (예: ${placeholder})`,
+            `New category name (e.g. ${placeholder})`,
+            `新しいカテゴリ名（例：${placeholder}）`,
           )}
           placeholderTextColor="#A8A8A8"
           maxLength={40}
@@ -124,7 +113,7 @@ export function CategoryPicker({
           testID={`${testID}-new-ok`}
         >
           <Txt size={13} weight="bold">
-            {t("만들기", "Add", "作成")}
+            {t("생성", "Create", "作成")}
           </Txt>
         </Pressable>
       </View>
@@ -194,9 +183,9 @@ export function CategoryPicker({
                 style={styles.add}
                 accessibilityRole="button"
                 accessibilityLabel={t(
-                  `${cat.name} 안에 ${levelName(depth + 1, t)} 만들기`,
-                  `New ${levelName(depth + 1, t)} in ${cat.name}`,
-                  `${cat.name}の中に${levelName(depth + 1, t)}を作る`,
+                  `${cat.name} 안에 카테고리 생성`,
+                  `New category in ${cat.name}`,
+                  `${cat.name}の中にカテゴリを作成`,
                 )}
                 testID={`${testID}-add-in-${cat.name}`}
               >
@@ -217,16 +206,16 @@ export function CategoryPicker({
         >
           <Plus size={18} />
           <Txt size={15} weight="bold" style={{ marginLeft: 8 }}>
-            {t("새 대분류 만들기", "New category", "新しい大分類")}
+            {t("새 카테고리 생성", "New category", "新しいカテゴリを作成")}
           </Txt>
         </Pressable>
       )}
       {!rows.length && !onCreate && (
         <Txt size={13} color={C.muted} style={{ paddingVertical: 16 }}>
           {t(
-            "아직 분류가 없습니다.",
+            "아직 카테고리가 없습니다.",
             "No categories yet.",
-            "まだ分類がありません。",
+            "まだカテゴリがありません。",
           )}
         </Txt>
       )}

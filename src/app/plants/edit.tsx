@@ -20,12 +20,11 @@ import { useAuth } from '@/lib/auth';
 import { childrenOf, pathLabel, savePlant, useCategories, useFinds, usePlants, useShops, type PlantInput } from '@/lib/data';
 import { notify } from '@/lib/dialogs';
 import { useLocale } from '@/lib/i18n';
-import { ID_STATUSES, idStatusLabel } from '@/lib/labels';
+import { ID_STATUSES, idStatusLabel, noCategoryLabel } from '@/lib/labels';
 import { cleanCultivar, composeName, familyForGenus, knownFamilies, knownGenera, normalizeFamily, normalizeGenus, parseName, splitQualifier, type Qualifier } from '@/lib/names';
 import { storeFormPhotos, useSignedUrls, userFolder, type FormPhoto } from '@/lib/photos';
 import { errorText, USER_BUCKET } from '@/lib/supabase';
 import { C } from '@/lib/theme';
-import { depthOf } from '@/lib/tree';
 import { useCategoryEdit } from '@/lib/use-categories-edit';
 import { PLANT_PHOTO_LIMIT, type Category, type IdStatus, type Plant } from '@/lib/types';
 
@@ -120,13 +119,16 @@ function PlantFormBody({ existing, plants, cats: loadedCats, presetCategory }: {
     .slice(0, 12);
   // A category that was deleted elsewhere counts as none.
   const categoryId = category && cats.some((c) => c.id === category) ? category : null;
-  // Under a chosen 대분류, the typed genus can become (or pick) its 중분류 in one tap.
+  // The typed genus can become a category of its own at the top of My Plants (or pick the one that exists) in one tap.
   const typedGenus = normalizeGenus(genus);
-  const genusChild = categoryId && depthOf(cats, categoryId) === 1 && typedGenus ? childrenOf(cats, categoryId).find((c) => c.name.toLowerCase() === typedGenus.toLowerCase()) ?? null : null;
-  const genusShortcut = categoryId && depthOf(cats, categoryId) === 1 && typedGenus ? (genusChild ? 'pick' : 'create') : null;
+  const sameName = (name: string) => name.toLowerCase() === typedGenus.toLowerCase();
+  const genusTop = typedGenus ? (childrenOf(cats, null).find((c) => sameName(c.name)) ?? null) : null;
+  const chosen = cats.find((c) => c.id === categoryId) ?? null;
+  // Hidden once the chosen category already carries the genus name (at any level).
+  const genusShortcut = typedGenus && !(chosen && sameName(chosen.name)) ? (genusTop ? 'pick' : 'create') : null;
   const applyGenusCategory = async () => {
-    if (genusChild) return setCategory(genusChild.id);
-    const id = await catEdit.create(typedGenus, categoryId);
+    if (genusTop) return setCategory(genusTop.id);
+    const id = await catEdit.create(typedGenus, null);
     if (id) setCategory(id);
   };
 
@@ -196,11 +198,15 @@ function PlantFormBody({ existing, plants, cats: loadedCats, presetCategory }: {
     <View>
       <PhotoField label={t('사진', 'Photos', '写真')} photos={photos} onChange={setPhotos} max={PLANT_PHOTO_LIMIT} resolve={resolve} testID="plant-photos" />
       <SelectBox
-        label={t('분류', 'Category', '分類')}
+        label={t('카테고리', 'Category', 'カテゴリ')}
         value={pathLabel(cats, categoryId)}
-        placeholder={t('미분류', 'Unsorted', '未分類')}
+        placeholder={noCategoryLabel(t)}
         onPress={() => setPickingCategory(true)}
-        hint={t('대분류 › 중분류 › 소분류 중 원하는 곳까지 고르세요. 새 분류도 여기서 만들 수 있습니다.', 'Pick down to any level: category › sub › sub-sub. You can make new ones here too.', '大分類 › 中分類 › 小分類のどこまででも選べます。新しい分類もここで作れます。')}
+        hint={t(
+          '카테고리는 3단계까지 나눌 수 있습니다 (예: Orchid › Bulbophyllum › 유묘). 원하는 단계까지 고르세요. 새 카테고리도 여기서 생성할 수 있습니다.',
+          'Categories go up to three levels (e.g. Orchid › Bulbophyllum › Seedlings). Pick any level; you can create new ones here too.',
+          'カテゴリは3段階まで分けられます（例：Orchid › Bulbophyllum › 実生）。好きな段階まで選べます。新しいカテゴリもここで作成できます。',
+        )}
         testID="plant-category"
       />
 
@@ -234,8 +240,8 @@ function PlantFormBody({ existing, plants, cats: loadedCats, presetCategory }: {
           {genusShortcut === 'create' && <Plus size={16} />}
           <Txt size={13} style={{ marginLeft: genusShortcut === 'create' ? 6 : 0, flexShrink: 1 }}>
             {genusShortcut === 'create'
-              ? t(`'${typedGenus}' 중분류 만들어 넣기`, `Make sub-category '${typedGenus}' and use it`, `中分類「${typedGenus}」を作って入れる`)
-              : t(`'${typedGenus}' 중분류에 넣기`, `Put in sub-category '${typedGenus}'`, `中分類「${typedGenus}」に入れる`)}
+              ? t(`'${typedGenus}' 속으로 카테고리 생성`, `Create category '${typedGenus}' from the genus`, `属「${typedGenus}」でカテゴリを作成`)
+              : t(`'${genusTop?.name}' 카테고리에 넣기`, `Put in category '${genusTop?.name}'`, `カテゴリ「${genusTop?.name}」に入れる`)}
           </Txt>
         </Pressable>
       )}
@@ -317,10 +323,10 @@ function PlantFormBody({ existing, plants, cats: loadedCats, presetCategory }: {
       ))}
       <CategoryPicker
         visible={pickingCategory}
-        title={t('분류', 'Category', '分類')}
+        title={t('카테고리', 'Category', 'カテゴリ')}
         cats={cats}
         value={categoryId}
-        noneLabel={t('미분류', 'Unsorted', '未分類')}
+        noneLabel={noCategoryLabel(t)}
         onPick={(id) => {
           setCategory(id);
           setPickingCategory(false);
