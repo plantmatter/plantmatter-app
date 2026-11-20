@@ -22,6 +22,11 @@ export function originLabel(region: string | null | undefined, place: string | n
   if (!r) return '';
   return place ? `${r} › ${placeName(place, locale)}` : r;
 }
+/**
+ * A place as shown in the app (v0.1.8): the last level only — "보르네오", "에콰도르" — or the region when no
+ * country / island was chosen ("남아메리카"). The full path stays in search ({@link originLabel}).
+ */
+export const placeShort = (region: string | null | undefined, place: string | null | undefined, locale: Locale) => (place ? placeName(place, locale) : regionName(region, locale));
 /** "말레이시아 · 동남아시아" */
 export function countryLabel(code: string | null | undefined, locale: Locale) {
   if (!code) return '';

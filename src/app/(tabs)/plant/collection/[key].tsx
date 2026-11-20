@@ -20,7 +20,7 @@ import { Loading, Notice, Page } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { deletePlants, movePlants, renameCategory, reorderPlants, setPlantsPrivate, useCategories, usePlants } from '@/lib/data';
 import { chooseAsync, confirmAsync } from '@/lib/dialogs';
-import { originLabel } from '@/lib/geo';
+import { placeShort } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { idStatusLabel, noCategoryLabel } from '@/lib/labels';
 import { addPlant } from '@/lib/nav';
@@ -289,7 +289,7 @@ function PlantList({ plants, locale, t, tagOf }: { plants: Plant[]; locale: Retu
           strong
           key={p.id}
           name={p.scientific_name}
-          meta={[p.nickname, p.identification_status === 'verified' ? idStatusLabel('verified', locale) : '', originLabel(p.origin_region, p.origin_place, locale)].filter(Boolean).join(' · ')}
+          meta={[p.nickname, p.identification_status === 'verified' ? idStatusLabel('verified', locale) : '', placeShort(p.origin_region, p.origin_place, locale)].filter(Boolean).join(' · ')}
           badge={p.is_private ? t('비공개', 'PRIVATE', '非公開') : undefined}
           thumb={resolve(p.photo_paths[0])}
           tag={tagOf(p)}

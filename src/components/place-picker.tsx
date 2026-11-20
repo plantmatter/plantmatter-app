@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { REGIONS } from '@/data/geo';
-import { choiceKey, choiceLabel, choicesIn, countryLabel, findPlaceLabel, originLabel, regionName, searchPlaces, type PickerMode, type PlaceChoice } from '@/lib/geo';
+import { choiceKey, choiceLabel, choicesIn, placeShort, regionName, searchPlaces, type PickerMode, type PlaceChoice } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { C } from '@/lib/theme';
 
@@ -35,7 +35,8 @@ export function PlacePicker({ mode, value, onChange, label, testID }: { mode: Pi
       .catch(() => setRecent([]));
   }, [open, mode]);
 
-  const shown = mode === 'country' ? countryLabel(value.place, locale) : mode === 'find' ? findPlaceLabel(value.region, value.place, locale) : originLabel(value.region, value.place, locale);
+  // Only the last level is shown ("에콰도르", not "남아메리카 › 에콰도르"); the list below still names the region.
+  const shown = placeShort(value.region, value.place, locale);
   const results = useMemo(() => searchPlaces(query, mode), [query, mode]);
 
   const choose = (c: PlaceChoice | null) => {
@@ -116,7 +117,7 @@ export function PlacePicker({ mode, value, onChange, label, testID }: { mode: Pi
               <View style={styles.recent}>
                 {recent.map((c) => (
                   <Pressable key={choiceKey(c)} onPress={() => choose(c)} style={styles.chip} accessibilityRole="button">
-                    <Txt size={12}>{c.kind === 'country' && mode === 'country' ? choiceLabel(c, locale) : originLabel(c.region, c.place, locale)}</Txt>
+                    <Txt size={12}>{placeShort(c.region, c.place, locale)}</Txt>
                   </Pressable>
                 ))}
               </View>

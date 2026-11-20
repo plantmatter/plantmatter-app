@@ -16,7 +16,7 @@ import { formatCoords } from '@/lib/coords';
 import { deleteFindOnline, setFindPrivate, useFinds } from '@/lib/data';
 import { confirmAsync, notify } from '@/lib/dialogs';
 import { dayLabel, timeLabel } from '@/lib/format';
-import { findPlaceLabel } from '@/lib/geo';
+import { placeShort } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { abundanceLabel, basisLabel, growthFormLabel, idStatusLabel, phenologyLabel } from '@/lib/labels';
 import { discardQueued, queuedAsFind, useOutbox } from '@/lib/outbox';
@@ -125,7 +125,7 @@ function FindDetail({ id }: { id: string }) {
             { label: t('학명', 'Scientific name', '学名'), value: <FindName find={f} size={17} style={{ lineHeight: 23 }} testID="find-title" /> },
             { label: t('과', 'Family', '科'), value: f.family ?? '', testID: 'find-info-family' },
             { label: t('동정 상태', 'Species identified', '同定'), value: idStatusLabel(f.identification_status, locale), testID: 'find-info-status' },
-            { label: t('관찰 위치', 'Locality', '観察地点'), value: findPlaceLabel(f.region, f.country_code, locale) || t('지정 안 함', 'Not set', '未設定'), testID: 'find-info-country' },
+            { label: t('관찰 위치', 'Locality', '観察地点'), value: placeShort(f.region, f.country_code, locale) || t('지정 안 함', 'Not set', '未設定'), testID: 'find-info-country' },
             { label: t('관찰 일자', 'Observation Date', '観察日'), value: dayLabel(f.observed_on, locale), testID: 'find-info-date' },
           ]}
         />

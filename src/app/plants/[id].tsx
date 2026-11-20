@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { addWatering, deletePlant, deleteWatering, pathLabel, setPlantPrivate, setWateringInterval, useCategories, usePlants } from '@/lib/data';
 import { chooseAsync, confirmAsync, notify } from '@/lib/dialogs';
 import { dayLabel, todayStr } from '@/lib/format';
-import { originLabel } from '@/lib/geo';
+import { placeShort } from '@/lib/geo';
 import { useLocale } from '@/lib/i18n';
 import { idStatusLabel, noCategoryLabel } from '@/lib/labels';
 import { useSignedUrls } from '@/lib/photos';
@@ -215,7 +215,7 @@ function PlantDetail({ id }: { id: string }) {
           <InfoRow label={t('카테고리', 'Category', 'カテゴリ')} value={pathLabel(cats, p.category_id) || noCategoryLabel(t)} testID="plant-info-category" />
           <InfoRow label={t('속', 'Genus', '属')} value={p.genus ?? ''} testID="plant-info-genus" />
           <InfoRow label={t('별칭', 'Nickname', '愛称')} value={p.nickname} testID="plant-info-nickname" />
-          <InfoRow label={t('원산지', 'Origin', '原産地')} value={originLabel(p.origin_region, p.origin_place, locale)} testID="plant-info-origin" />
+          <InfoRow label={t('원산지', 'Origin', '原産地')} value={placeShort(p.origin_region, p.origin_place, locale)} testID="plant-info-origin" />
           {parent(p.seed_parent_id, p.seed_parent_name, t('모본 (♀)', 'Seed (♀)', '母本 (♀)'), 'plant-info-seed')}
           {parent(p.pollen_parent_id, p.pollen_parent_name, t('부본 (♂)', 'Pollen (♂)', '父本 (♂)'), 'plant-info-pollen')}
           <View testID="watering-log">
