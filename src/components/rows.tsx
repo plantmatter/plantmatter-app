@@ -12,7 +12,8 @@ import { Txt } from './txt';
  * `name` is a string (italic, or bold upright with `strong`) or an already typeset name (observations).
  * `strong`: the roomier My Plants list row — bold name, bigger ›, light lines.
  */
-export function ItemRow({ name, meta, thumb, onPress, badge, strong, testID }: { name: ReactNode; meta?: string; thumb?: string; onPress: () => void; badge?: string; strong?: boolean; testID?: string }) {
+/** `tag`: a short note before the › (e.g. watering "D-2"); `strong` tags are lime, like the watering button. */
+export function ItemRow({ name, meta, thumb, onPress, badge, strong, tag, testID }: { name: ReactNode; meta?: string; thumb?: string; onPress: () => void; badge?: string; strong?: boolean; tag?: { label: string; strong: boolean } | null; testID?: string }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, strong && styles.rowStrong, pressed && { opacity: 0.6 }]} accessibilityRole="button" testID={testID}>
       <View style={[styles.thumb, strong && styles.thumbStrong]}>{thumb ? <Image source={{ uri: thumb }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Txt size={18} color="#BBB">✿</Txt>}</View>
@@ -47,6 +48,13 @@ export function ItemRow({ name, meta, thumb, onPress, badge, strong, testID }: {
           </View>
         )}
       </View>
+      {!!tag && (
+        <View style={[styles.tag, tag.strong && styles.tagStrong]} testID={testID ? `${testID}-tag` : undefined}>
+          <Txt size={11} weight={tag.strong ? 'bold' : 'light'} color={tag.strong ? C.ink : C.muted}>
+            {tag.label}
+          </Txt>
+        </View>
+      )}
       {strong ? <ChevronRight size={24} color={C.ink} /> : <ChevronRight />}
     </Pressable>
   );
@@ -75,6 +83,8 @@ const styles = StyleSheet.create({
   thumb: { width: 48, height: 48, backgroundColor: '#E9E9E9', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   thumbStrong: { width: 52, height: 52 },
   badge: { backgroundColor: '#6B6B6B', paddingHorizontal: 5, paddingVertical: 1 },
+  tag: { paddingHorizontal: 2, paddingVertical: 2 },
+  tagStrong: { backgroundColor: C.lime, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   nest: { marginLeft: 2, marginTop: 4, marginBottom: 14, paddingLeft: 14, borderLeftWidth: 1, borderLeftColor: C.hair },
   nestLight: { borderLeftWidth: 1, borderLeftColor: C.hair, marginBottom: 8, paddingLeft: 12 },
 });

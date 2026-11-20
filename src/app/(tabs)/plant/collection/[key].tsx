@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryPicker } from '@/components/category-picker';
@@ -15,7 +15,7 @@ import { ReorderList } from '@/components/reorder-list';
 import { ItemRow, TextAction } from '@/components/rows';
 import { SearchPanel } from '@/components/search-panel';
 import { TopBar } from '@/components/top-bar';
-import { baselineFromBottom, Txt } from '@/components/txt';
+import { baselineFromBottom, boldTextWidth, Txt } from '@/components/txt';
 import { Loading, Notice, Page } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { deletePlants, movePlants, renameCategory, reorderPlants, setPlantsPrivate, useCategories, usePlants } from '@/lib/data';
@@ -27,15 +27,16 @@ import { addPlant } from '@/lib/nav';
 import { useSignedUrls } from '@/lib/photos';
 import { matchesPlant } from '@/lib/search';
 import { errorText } from '@/lib/supabase';
-import { BAR_HEIGHT, C } from '@/lib/theme';
+import { BAR_HEIGHT, C, GUTTER } from '@/lib/theme';
 import { childrenOf, depthOf, MAX_DEPTH, PLANT_SORTS, plantsDirectlyIn, plantsUnder, sortPlants, unsortedPlants, type PlantSort } from '@/lib/tree';
 import type { Plant } from '@/lib/types';
 import { useCategoryEdit } from '@/lib/use-categories-edit';
+import { dueTag, useWateringPlans } from '@/lib/use-watering';
 
 const SORT_KEY = 'pm-plant-sort';
 const PLANT_ROW = 80;
-const TITLE_SIZE = 40;
-const TITLE_LINE = 48;
+/** Title sizes, largest first: a long name steps down until it fits on one line with its count and the tools. */
+const TITLE_SIZES = [40, 36, 32, 28];
 // Search · sort · ＋ next to the title: 20 px icons whose lines still look 1.5 px like every other icon,
 // 36 apart, each still easy to press (44 × 44 with the slop).
 const TOOL_ICON = 20;
@@ -64,6 +65,7 @@ export default function CollectionScreen() {
   const { t, locale } = useLocale();
   const { member } = useAuth();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const { key } = useLocalSearchParams<{ key: string }>();
   const id = String(key ?? 'all');
   const prompt = usePrompt();
@@ -84,12 +86,18 @@ export default function CollectionScreen() {
   const all = id === 'all' ? plants : id === 'unsorted' ? unsortedPlants(plants, cats) : cat ? plantsUnder(plants, cats, cat.id) : [];
   const direct = cat ? plantsDirectlyIn(plants, cat.id) : all;
   const q = query.trim();
-  const listed = sortPlants(q ? all.filter((p) => matchesPlant(p, q)) : direct, sort);
+  const plans = useWateringPlans();
+  const listed = sortPlants(q ? all.filter((p) => matchesPlant(p, q)) : direct, sort, (p) => plans.planOf(p).dueIn);
   const kids = cat ? childrenOf(cats, cat.id) : [];
   const chosen = plants.filter((p) => selected.includes(p.id));
   const title = id === 'all' ? 'All' : id === 'unsorted' ? noCategoryLabel(t) : (cat?.name ?? '');
+  // A long name gets a smaller title so it stays on one line next to its count and the tools.
+  const countWidth = 7 + boldTextWidth(`(${all.length})`, 12);
+  const room = screenWidth - GUTTER * 2 - (3 * 36 - 8) - countWidth - 4;
+  const titleSize = TITLE_SIZES.find((size) => boldTextWidth(title, size, -size / 40) <= room) ?? TITLE_SIZES[TITLE_SIZES.length - 1];
+  const titleLine = Math.round(titleSize * 1.2);
   // The count and the icons sit on the title's baseline.
-  const baseline = baselineFromBottom(title, TITLE_SIZE, TITLE_LINE);
+  const baseline = baselineFromBottom(title, titleSize, titleLine);
 
   const toggleEdit = () => {
     setSearching(false);
@@ -104,6 +112,7 @@ export default function CollectionScreen() {
       oldest: t('오래된 등록순', 'Oldest first', '登録が古い順'),
       name: t('이름순', 'By name', '名前順'),
       watering: t('물 준 지 오래된 순', 'Longest since watering', '水やりから長い順'),
+      due: t('물 줄 날짜순', 'Next watering first', '水やり予定が近い順'),
       manual: t('직접 정한 순서', 'My own order', '自分で決めた順'),
     })[s];
   const pickSort = async () => {
@@ -163,7 +172,7 @@ export default function CollectionScreen() {
             <View>
               <View style={styles.titleRow} testID="collection-title">
                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <Txt weight="bold" size={TITLE_SIZE} style={{ letterSpacing: -1, lineHeight: TITLE_LINE, flexShrink: 1 }}>
+                  <Txt weight="bold" size={titleSize} style={{ letterSpacing: -titleSize / 40, lineHeight: titleLine, flexShrink: 1 }} testID="collection-name">
                     {title}
                   </Txt>
                   <Txt size={12} color={C.muted} style={{ marginLeft: 7, marginBottom: baseline - baselineFromBottom('(0)', 12) }} testID="collection-count">
@@ -227,7 +236,7 @@ export default function CollectionScreen() {
                 {editing ? (
                   <EditPlantList plants={listed} selected={selected} onToggle={toggle} onReorder={reorder} />
                 ) : (
-                  <PlantList plants={listed} locale={locale} t={t} />
+                  <PlantList plants={listed} locale={locale} t={t} tagOf={(p) => dueTag(plans.planOf(p), t)} />
                 )}
                 {editing && <View style={{ height: 90 }} />}
               </View>
@@ -271,7 +280,7 @@ export default function CollectionScreen() {
   );
 }
 
-function PlantList({ plants, locale, t }: { plants: Plant[]; locale: ReturnType<typeof useLocale>['locale']; t: ReturnType<typeof useLocale>['t'] }) {
+function PlantList({ plants, locale, t, tagOf }: { plants: Plant[]; locale: ReturnType<typeof useLocale>['locale']; t: ReturnType<typeof useLocale>['t']; tagOf: (p: Plant) => { label: string; strong: boolean } | null }) {
   const resolve = useSignedUrls(plants.map((p) => p.photo_paths[0]));
   return (
     <View>
@@ -283,6 +292,7 @@ function PlantList({ plants, locale, t }: { plants: Plant[]; locale: ReturnType<
           meta={[p.nickname, p.identification_status === 'verified' ? idStatusLabel('verified', locale) : '', originLabel(p.origin_region, p.origin_place, locale)].filter(Boolean).join(' · ')}
           badge={p.is_private ? t('비공개', 'PRIVATE', '非公開') : undefined}
           thumb={resolve(p.photo_paths[0])}
+          tag={tagOf(p)}
           onPress={() => router.push(`/plants/${p.id}`)}
           testID={`plant-row-${p.id}`}
         />

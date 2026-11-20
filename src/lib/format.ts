@@ -23,6 +23,17 @@ export function dayLabel(s: string | null | undefined, locale: Locale) {
   return `${a.y}. ${a.m}. ${a.d}`;
 }
 
+const WEEK = { ko: ['일', '월', '화', '수', '목', '금', '토'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], ja: ['日', '月', '火', '水', '木', '金', '土'] };
+/** Short day with the weekday: 11월 27일 (금) / Nov 27 (Fri) / 11月27日(金) */
+export function shortDay(s: string | null | undefined, locale: Locale) {
+  if (!s || !isDateStr(s)) return '';
+  const a = parts(s);
+  const w = WEEK[locale][new Date(Date.UTC(a.y, a.m - 1, a.d)).getUTCDay()];
+  if (locale === 'en') return `${MONTHS[a.m - 1]} ${a.d} (${w})`;
+  if (locale === 'ja') return `${a.m}月${a.d}日(${w})`;
+  return `${a.m}월 ${a.d}일 (${w})`;
+}
+
 /** Event range: "2026. 11. 27~28", "Nov 27–28, 2026", "2026年11月27日〜28日". */
 export function eventDate(e: Pick<MatterEvent, 'starts_on' | 'ends_on'>, locale: Locale) {
   const a = parts(e.starts_on);

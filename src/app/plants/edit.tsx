@@ -15,7 +15,7 @@ import { usePrompt } from '@/components/prompt';
 import { Sheet, SheetItem } from '@/components/sheet';
 import { TopBar } from '@/components/top-bar';
 import { Txt } from '@/components/txt';
-import { Button, Field, Label, Loading, Page, ScreenTitle, SectionHead, Segmented, SelectBox, VisibilityField } from '@/components/ui';
+import { Button, ChoiceChips, Field, Label, Loading, Page, ScreenTitle, SectionHead, Segmented, SelectBox, VisibilityField } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { childrenOf, pathLabel, savePlant, useCategories, useFinds, usePlants, useShops, type PlantInput } from '@/lib/data';
 import { notify } from '@/lib/dialogs';
@@ -26,6 +26,7 @@ import { storeFormPhotos, useSignedUrls, userFolder, type FormPhoto } from '@/li
 import { errorText, USER_BUCKET } from '@/lib/supabase';
 import { C } from '@/lib/theme';
 import { useCategoryEdit } from '@/lib/use-categories-edit';
+import { cleanInterval, INTERVAL_CHOICES } from '@/lib/watering';
 import { PLANT_PHOTO_LIMIT, type Category, type IdStatus, type Plant } from '@/lib/types';
 
 type Parent = { id: string | null; name: string };
@@ -102,6 +103,8 @@ function PlantFormBody({ existing, plants, cats: loadedCats, presetCategory }: {
   const [isPrivate, setIsPrivate] = useState(existing?.is_private ?? false);
   const [nickname, setNickname] = useState(existing?.nickname ?? '');
   const [status, setStatus] = useState<IdStatus>(existing?.identification_status ?? 'unidentified');
+  // '' or 'auto' = automatic (records average); a number of days otherwise.
+  const [interval, setIntervalChoice] = useState(existing?.watering_interval_days ? String(existing.watering_interval_days) : 'auto');
   const [sheet, setSheet] = useState<'seed' | 'pollen' | null>(null);
   const [busy, setBusy] = useState(false);
   const resolve = useSignedUrls(photos.map((p) => p.path));
@@ -156,6 +159,9 @@ function PlantFormBody({ existing, plants, cats: loadedCats, presetCategory }: {
     if (!user) return;
     const g = normalizeGenus(genus);
     if (!g) return notify(t('속을 입력해 주세요', 'Enter the genus', '属を入力してください'), t('예: Bulbophyllum', 'e.g. Bulbophyllum', '例：Bulbophyllum'));
+    const auto = !interval || interval === 'auto';
+    const intervalDays = auto ? null : cleanInterval(interval);
+    if (!auto && intervalDays === null) return notify(t('관수 주기는 1에서 365 사이의 숫자로 넣어 주세요', 'Enter a watering interval from 1 to 365 days', '水やり間隔は1〜365の数字で入れてください'));
     setBusy(true);
     try {
       const id = existing?.id ?? randomUUID();
@@ -182,6 +188,7 @@ function PlantFormBody({ existing, plants, cats: loadedCats, presetCategory }: {
         is_private: isPrivate,
         shop: shop.replace(/\s+/g, ' ').trim().slice(0, 100),
         last_watered_on: existing?.last_watered_on ?? null,
+        watering_interval_days: intervalDays,
       };
       await savePlant(user.id, row, existing, plants);
       await Promise.all([qc.invalidateQueries({ queryKey: ['plants'] }), qc.invalidateQueries({ queryKey: ['categories'] })]);
@@ -294,6 +301,17 @@ function PlantFormBody({ existing, plants, cats: loadedCats, presetCategory }: {
           ))}
         </View>
       )}
+      <ChoiceChips
+        label={t('관수 주기', 'Watering interval', '水やり間隔')}
+        value={interval}
+        onChange={setIntervalChoice}
+        options={[{ value: 'auto', label: t('자동', 'Auto', '自動') }, ...INTERVAL_CHOICES.map((n) => ({ value: String(n), label: t(`${n}일`, `${n} d`, `${n}日`) }))]}
+        custom={{ label: t('직접 입력', 'Other', '直接入力'), placeholder: t('일 수 (예: 9)', 'days (e.g. 9)', '日数（例：9）') }}
+        testID="plant-interval"
+      />
+      <Txt size={10} color={C.muted} style={{ marginTop: -8, marginBottom: 16, lineHeight: 15 }}>
+        {t('자동: 물 준 기록의 평균으로 다음 관수를 추천합니다 (기록 3번부터). 주기를 고르면 그 주기로 추천합니다.', 'Auto: the next watering is suggested from the average of your records (from 3 records). A chosen interval is used instead.', '自動：水やり記録の平均から次の水やりを提案します（記録3回から）。間隔を選ぶとその間隔で提案します。')}
+      </Txt>
       <Field label={t('메모', 'Notes', 'メモ')} value={notes} onChangeText={setNotes} multiline maxLength={2000} testID="plant-notes" />
       <VisibilityField label={t('공개 설정', 'Visibility', '公開設定')} isPrivate={isPrivate} onChange={setIsPrivate} testID="plant-visibility" />
 

@@ -5,7 +5,7 @@ import { useAuth } from './auth';
 import { removePhotos } from './photos';
 import { MEDIA_BUCKET, supabase, USER_BUCKET } from './supabase';
 import { canMoveUnder, childrenOf, depthOf, MAX_DEPTH, nameTaken, plantsDirectlyIn } from './tree';
-import type { Category, Find, MatterEvent, MatterShop, Plant } from './types';
+import type { Category, Find, MatterEvent, MatterShop, Plant, Watering } from './types';
 
 const need = () => {
   if (!supabase) throw new Error('Supabase is not configured');
@@ -91,11 +91,11 @@ export function useShops() {
 
 // ---------- categories (v0.1.5: made by the user, up to three levels) ----------
 // The genus is part of the name only; it no longer decides the category.
-const MIGRATION = 'v0.1.5';
+const MIGRATION = 'v0.1.7';
 /** Turn "column … does not exist" from an old database into a clear message. */
 export function schemaHint(e: unknown) {
   const m = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : String(e);
-  if (/schema cache|column .* does not exist|could not find the '.*' column|new row violates row-level security policy for table "plant_categories"/i.test(m))
+  if (/schema cache|column .* does not exist|relation .* does not exist|could not find the '.*' column|new row violates row-level security policy for table "plant_categories"/i.test(m))
     return `데이터베이스 업데이트가 필요합니다. Supabase SQL Editor에서 supabase/${MIGRATION}.sql을 실행해 주세요. (Run supabase/${MIGRATION}.sql in the Supabase SQL Editor.)`;
   return m;
 }
@@ -217,8 +217,39 @@ export async function reorderPlants(ids: string[]) {
   }
 }
 /** "주기 리셋": record today's watering. */
-export async function setWatered(id: string, day: string) {
-  const { error } = await need().from('plants').update({ last_watered_on: day }).eq('id', id);
+// ---------- watering (v0.1.7) ----------
+const PAGE = 1000;
+/** Watering days of the last ~13 months for all of the user's plants (enough for the averages), newest first. */
+export function useWaterings() {
+  const { user, member } = useAuth();
+  return useQuery({
+    queryKey: ['waterings', user?.id],
+    enabled: !!user && member === true,
+    queryFn: async () => {
+      const since = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10);
+      const out: Watering[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await need().from('plant_waterings').select('id,plant_id,watered_on').eq('owner_id', user!.id).gte('watered_on', since).order('watered_on', { ascending: false }).range(from, from + PAGE - 1);
+        // An old database without the table still shows the plants: the last watering then comes from the plant.
+        if (error) return out;
+        out.push(...((data ?? []) as Watering[]));
+        if (!data || data.length < PAGE) return out;
+      }
+    },
+  });
+}
+/** Record a watering (a second one on the same day is ignored). */
+export async function addWatering(uid: string, plantId: string, day: string) {
+  const { error } = await need().from('plant_waterings').upsert({ owner_id: uid, plant_id: plantId, watered_on: day }, { onConflict: 'plant_id,watered_on', ignoreDuplicates: true });
+  failSchema(error);
+}
+export async function deleteWatering(id: string) {
+  const { error } = await need().from('plant_waterings').delete().eq('id', id);
+  failSchema(error);
+}
+/** Interval set by hand (days), or null for automatic. */
+export async function setWateringInterval(plantId: string, days: number | null) {
+  const { error } = await need().from('plants').update({ watering_interval_days: days }).eq('id', plantId);
   failSchema(error);
 }
 export async function setPlantPrivate(id: string, value: boolean) {

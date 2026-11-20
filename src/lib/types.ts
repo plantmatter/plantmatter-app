@@ -43,12 +43,21 @@ export type Plant = {
   is_private: boolean;
   /** Where it was bought (v0.1.3). */
   shop: string;
-  /** Last watering (v0.1.3); "주기 리셋" sets it to today. */
+  /** Latest watering day (v0.1.3); since v0.1.7 the database keeps it equal to the latest plant_waterings row. */
   last_watered_on: string | null;
+  /** Watering interval set by hand in days (v0.1.7); null = automatic, from the average of the records. */
+  watering_interval_days: number | null;
   /** Place in "직접 정한 순서" (v0.1.5); smaller first. */
   sort_order: number;
   created_at?: string;
   updated_at?: string;
+};
+
+/** One day a plant was watered (v0.1.7). */
+export type Watering = {
+  id: string;
+  plant_id: string;
+  watered_on: string;
 };
 
 export type Find = {

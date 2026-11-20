@@ -1,4 +1,4 @@
--- PLANT MATTER app — database schema (v0.1.5)
+-- PLANT MATTER app — database schema (v0.1.7)
 -- Run once in a NEW Supabase project: SQL Editor → paste everything → Run. Safe to run again.
 --
 -- What it creates
@@ -7,7 +7,8 @@
 --   app_admins        accounts that may post MATTER events and shops (managed here)
 --   plant_categories  "My Plants" categories made by the user: 대분류 › 중분류 › 소분류 (three levels at most)
 --   plants            kept plants (category, family, genus, sp./cf./aff., species, additional name, origin,
---                     seed / pollen parents, photos, shop, last watering, own list order)
+--                     seed / pollen parents, photos, shop, last watering, watering interval, own list order)
+--   plant_waterings   every day a plant was watered (one per day), for the usual interval and the next watering
 --   finds             observations (family, name with sp./cf./aff., additional name and author, recorded by, country or region,
 --                     locality / coordinates hidden by default, elevation, habitat, occurrence ID, and the
 --                     Found Wild record: time, growth form, substrate, phenology, measurements, collection)
@@ -533,6 +534,65 @@ do $$ begin
 exception when unique_violation then
   raise notice 'Two sub-categories in one place share a name. Rename one in the app, then run this file again.';
 end $$;
+
+
+-- 15. v0.1.7 · WATERING RECORDS AND INTERVAL -------------------------------------------------------------
+-- Every day a plant was watered is kept (one row per plant and day). The app suggests the next watering from
+-- the usual interval of these days, or from an interval set by hand (plants.watering_interval_days; empty =
+-- automatic). plants.last_watered_on is kept equal to the latest record by a trigger.
+alter table public.plants add column if not exists watering_interval_days integer;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'plants_watering_interval') then
+    alter table public.plants add constraint plants_watering_interval
+      check (watering_interval_days is null or watering_interval_days between 1 and 365);
+  end if;
+end $$;
+
+create table if not exists public.plant_waterings (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  plant_id uuid not null references public.plants(id) on delete cascade,
+  watered_on date not null check (watered_on >= date '2000-01-01'),
+  created_at timestamptz not null default now(),
+  constraint plant_waterings_one_per_day unique (plant_id, watered_on)
+);
+create index if not exists plant_waterings_owner on public.plant_waterings(owner_id, watered_on desc);
+alter table public.plant_waterings enable row level security;
+drop policy if exists "Own waterings read" on public.plant_waterings;
+drop policy if exists "Own waterings add" on public.plant_waterings;
+drop policy if exists "Own waterings edit" on public.plant_waterings;
+drop policy if exists "Own waterings remove" on public.plant_waterings;
+create policy "Own waterings read" on public.plant_waterings for select to authenticated using (owner_id = (select auth.uid()));
+-- one day of slack for time zones ahead of the server (UTC)
+create policy "Own waterings add" on public.plant_waterings for insert to authenticated
+  with check (public.is_beta_member() and owner_id = (select auth.uid()) and private.owns_plant(plant_id) and watered_on <= current_date + 1);
+create policy "Own waterings edit" on public.plant_waterings for update to authenticated
+  using (owner_id = (select auth.uid()))
+  with check (public.is_beta_member() and owner_id = (select auth.uid()) and private.owns_plant(plant_id) and watered_on <= current_date + 1);
+create policy "Own waterings remove" on public.plant_waterings for delete to authenticated using (owner_id = (select auth.uid()));
+revoke all on public.plant_waterings from anon;
+grant select, insert, update, delete on public.plant_waterings to authenticated;
+
+create or replace function private.sync_last_watered()
+returns trigger language plpgsql set search_path = '' as $$
+declare
+  pid uuid;
+  latest date;
+begin
+  foreach pid in array array_remove(array[old.plant_id, new.plant_id], null) loop
+    select max(w.watered_on) into latest from public.plant_waterings w where w.plant_id = pid;
+    update public.plants p set last_watered_on = latest where p.id = pid and p.last_watered_on is distinct from latest;
+  end loop;
+  return null;
+end $$;
+drop trigger if exists plant_waterings_sync on public.plant_waterings;
+create trigger plant_waterings_sync after insert or update or delete on public.plant_waterings
+  for each row execute function private.sync_last_watered();
+
+-- the one "last watering" kept before v0.1.7 becomes the first record
+insert into public.plant_waterings (owner_id, plant_id, watered_on)
+  select p.owner_id, p.id, p.last_watered_on from public.plants p where p.last_watered_on is not null
+  on conflict (plant_id, watered_on) do nothing;
 
 notify pgrst, 'reload schema';
 

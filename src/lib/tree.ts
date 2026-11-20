@@ -70,10 +70,11 @@ export function canMoveUnder(cats: Category[], id: string, newParent: string | n
 }
 
 // ---------- order of plants in a list ----------
-export type PlantSort = 'newest' | 'oldest' | 'name' | 'watering' | 'manual';
-export const PLANT_SORTS: PlantSort[] = ['newest', 'oldest', 'name', 'watering', 'manual'];
+export type PlantSort = 'newest' | 'oldest' | 'name' | 'watering' | 'due' | 'manual';
+export const PLANT_SORTS: PlantSort[] = ['newest', 'oldest', 'name', 'watering', 'due', 'manual'];
 
-export function sortPlants<T extends Pick<Plant, 'scientific_name' | 'last_watered_on' | 'sort_order'> & { created_at?: string }>(list: T[], how: PlantSort): T[] {
+/** `dueIn` (days until the suggested watering, negative = late) is used by 'due'; plants without one go last. */
+export function sortPlants<T extends Pick<Plant, 'scientific_name' | 'last_watered_on' | 'sort_order'> & { created_at?: string }>(list: T[], how: PlantSort, dueIn?: (p: T) => number | null): T[] {
   const created = (p: T) => p.created_at ?? '';
   const out = [...list];
   switch (how) {
@@ -84,6 +85,15 @@ export function sortPlants<T extends Pick<Plant, 'scientific_name' | 'last_water
     case 'watering':
       // never watered first, then the longest ago
       return out.sort((a, b) => (a.last_watered_on ?? '').localeCompare(b.last_watered_on ?? '') || created(b).localeCompare(created(a)));
+    case 'due': {
+      const due = (p: T) => dueIn?.(p) ?? null;
+      return out.sort((a, b) => {
+        const [x, y] = [due(a), due(b)];
+        if (x !== null && y !== null && x !== y) return x - y;
+        if ((x === null) !== (y === null)) return x === null ? 1 : -1;
+        return (a.last_watered_on ?? '').localeCompare(b.last_watered_on ?? '') || created(b).localeCompare(created(a));
+      });
+    }
     case 'manual':
       return out.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || created(b).localeCompare(created(a)));
     default:
